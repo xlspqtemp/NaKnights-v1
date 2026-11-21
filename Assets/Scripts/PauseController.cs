@@ -28,6 +28,13 @@ public class PauseController : MonoBehaviour
             ? hudCanvas.Find("PauseButton") as RectTransform
             : null;
         SlideshowManualScreen.AddGameMenuEntry(hudCanvas, pauseButtonRect);
+        if (hudCanvas != null && pauseButtonRect != null)
+        {
+            MapLegendUI mapLegendUI = hudCanvas.GetComponent<MapLegendUI>();
+            if (mapLegendUI == null)
+                mapLegendUI = hudCanvas.gameObject.AddComponent<MapLegendUI>();
+            mapLegendUI.Initialize(hudCanvas, pauseButtonRect);
+        }
     }
 
     private void CreatePauseRaycastBlocker()
