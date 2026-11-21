@@ -23,6 +23,10 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
     private const float VariantRowHeight = 38f;
     private const float VariantRowGap = 5f;
     private const string BankGothicFontResourcePath = "BankGothicMediumSDF";
+    private const string NeutrophilIconResourcePath = "UI/WBC HEADSHOT ICON";
+    private const string MacrophageIconResourcePath = "UI/Macrophage Headshot icon";
+    private const string TCellIconResourcePath = "UI/Killet t cell headshot icon";
+    private const string BCellIconResourcePath = "UI/B cell headshot icon";
 
     private static readonly Color ConsoleBackgroundColor = new Color(0.012f, 0.035f, 0.047f, 0.96f);
     private static readonly Color IconBackgroundColor = new Color(0.035f, 0.095f, 0.12f, 1f);
@@ -31,6 +35,10 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
     private static readonly Color MainTextColor = new Color(0.9f, 0.96f, 0.97f, 1f);
     private static readonly Color MutedTextColor = new Color(0.55f, 0.74f, 0.78f, 1f);
     private static readonly Color DarkOverlayColor = new Color(0.008f, 0.02f, 0.027f, 0.88f);
+    private static readonly Color IdleIconTint = new Color(0.42f, 0.46f, 0.48f, 1f);
+    private static readonly Color TrainingIconTint = Color.white;
+    private static readonly Color ReadyIconTint = new Color(0.45f, 1f, 0.72f, 1f);
+    private static readonly Color ReadyBackgroundColor = new Color(0.035f, 0.22f, 0.16f, 1f);
     private static readonly Color ModalDimColor = new Color(0.005f, 0.012f, 0.018f, 0.78f);
     private static readonly Color ModalPanelColor = new Color(0.018f, 0.055f, 0.07f, 0.99f);
     private static readonly Color VariantRowColor = new Color(0.035f, 0.095f, 0.12f, 1f);
@@ -140,6 +148,7 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
                     slot.StatusLabel.text = "BATCH TRAINED - NODE " + (slot.ReservedNodeIndex + 1);
                     slot.TimerLabel.text = "COMPLETE";
                     SetOverlayCoverage(slot, 0f);
+                    SetReadyVisuals(slot);
                 }
                 else
                 {
@@ -147,6 +156,7 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
                     slot.StatusLabel.text = "BATCH DEPLOYMENT FAILED";
                     slot.TimerLabel.text = "RETRY";
                     SetOverlayCoverage(slot, 0f);
+                    SetIdleVisuals(slot);
                 }
 
                 slot.ReservedNodeIndex = -1;
@@ -207,6 +217,16 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
         AddRightClickHandler(slot.Button.gameObject, () => ShowUnitInfo(slot.Unit));
 
         slot.IconRect = slot.Button.GetComponent<RectTransform>();
+        slot.BackgroundImage = iconBackground;
+        GameObject iconObject = CreateUiObject("UnitIcon", slot.Button.transform, true);
+        RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+        SetRect(iconRect, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+        slot.IconImage = iconObject.GetComponent<Image>();
+        slot.IconImage.sprite = GetUnitIcon(slot.Unit.Name);
+        slot.IconImage.preserveAspect = true;
+        slot.IconImage.raycastTarget = false;
+        slot.IconImage.color = IdleIconTint;
+
         GameObject overlayObject = CreateUiObject("TrainingDarkOverlay", slot.Button.transform, true);
         slot.OverlayRect = overlayObject.GetComponent<RectTransform>();
         SetRect(slot.OverlayRect, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
@@ -215,8 +235,6 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
         overlayImage.color = DarkOverlayColor;
         overlayImage.raycastTarget = false;
 
-        CreateText("UnitNumber", slot.Button.transform, (index + 1).ToString(), 44f, MainTextColor,
-            TextAlignmentOptions.Center, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
         slot.TimerLabel = CreateText("TrainingTimer", parent, FormatTrainingDuration(slot.Unit.TrainingSeconds), 13f, AccentColor,
             TextAlignmentOptions.Center, new Vector2(horizontalCenter, 0.5f), new Vector2(horizontalCenter, 0.5f), new Vector2(0.5f, 0.5f),
             new Vector2(0f, 76f), new Vector2(150f, 22f));
@@ -282,6 +300,7 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
         slot.ActiveVariantName = variantName;
         slot.StatusLabel.text = string.IsNullOrEmpty(variantName) ? "TRAINING - NODE " + (reservedNodeIndex + 1)
             : "TRAINING: " + variantName.ToUpperInvariant();
+        SetTrainingVisuals(slot);
         UpdateTrainingVisuals(slot);
         return true;
     }
@@ -301,6 +320,36 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
         slot.TimerLabel.text = FormatCountdown(slot.TimeRemaining);
         float coverage = slot.TrainingDuration <= 0f ? 0f : slot.TimeRemaining / slot.TrainingDuration;
         SetOverlayCoverage(slot, coverage);
+    }
+
+    private static void SetTrainingVisuals(TrainingSlot slot)
+    {
+        if (slot.IconImage != null)
+            slot.IconImage.color = TrainingIconTint;
+        if (slot.BackgroundImage != null)
+            slot.BackgroundImage.color = IconBackgroundColor;
+        if (slot.Button != null)
+            slot.Button.colors = CreateButtonColors(IconBackgroundColor, IconHighlightColor);
+    }
+
+    private static void SetIdleVisuals(TrainingSlot slot)
+    {
+        if (slot.IconImage != null)
+            slot.IconImage.color = IdleIconTint;
+        if (slot.BackgroundImage != null)
+            slot.BackgroundImage.color = IconBackgroundColor;
+        if (slot.Button != null)
+            slot.Button.colors = CreateButtonColors(IconBackgroundColor, IconHighlightColor);
+    }
+
+    private static void SetReadyVisuals(TrainingSlot slot)
+    {
+        if (slot.IconImage != null)
+            slot.IconImage.color = ReadyIconTint;
+        if (slot.BackgroundImage != null)
+            slot.BackgroundImage.color = ReadyBackgroundColor;
+        if (slot.Button != null)
+            slot.Button.colors = CreateButtonColors(ReadyBackgroundColor, IconHighlightColor);
     }
 
     private static void SetOverlayCoverage(TrainingSlot slot, float coverage)
@@ -569,6 +618,25 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
         }
     }
 
+    private static Sprite GetUnitIcon(string unitName)
+    {
+        string resourcePath;
+        switch (unitName)
+        {
+            case "Neutrophil": resourcePath = NeutrophilIconResourcePath; break;
+            case "Macrophage": resourcePath = MacrophageIconResourcePath; break;
+            case "T Cell": resourcePath = TCellIconResourcePath; break;
+            case "B Cell": resourcePath = BCellIconResourcePath; break;
+            default: return null;
+        }
+
+        Sprite icon = Resources.Load<Sprite>(resourcePath);
+        if (icon == null)
+            Debug.LogWarning("Lymphatic training icon was not found at Resources/" + resourcePath + ".png");
+        return icon;
+    }
+
+
     private static void AddRightClickHandler(GameObject target, Action onRightClick)
     {
         EventTrigger trigger = target.AddComponent<EventTrigger>();
@@ -688,6 +756,8 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
         public readonly UnitDefinition Unit;
         public Button Button;
         public RectTransform IconRect;
+        public Image BackgroundImage;
+        public Image IconImage;
         public RectTransform OverlayRect;
         public TextMeshProUGUI TimerLabel;
         public TextMeshProUGUI NameLabel;
