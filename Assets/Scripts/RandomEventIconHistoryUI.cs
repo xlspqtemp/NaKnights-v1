@@ -9,7 +9,10 @@ using UnityEngine.UI;
 public sealed class RandomEventIconHistoryUI : MonoBehaviour
 {
     private const string IconRowObjectName = "RandomEventIconRow";
-    private const float IconSize = 34f;
+    private const string BuiltInFontName = "LegacyRuntime.ttf";
+    private const float IconSize = 60f;
+    private const float EventNamePanelWidth = 286f;
+    private const float EventNamePanelHeight = 34f;
     private const float IconGapBelowBar = 8f;
     private const float IconSlideDistance = 42f;
     private const float IconEnterDuration = 0.22f;
@@ -19,7 +22,7 @@ public sealed class RandomEventIconHistoryUI : MonoBehaviour
 
     private static readonly Dictionary<string, Sprite> IconSpriteCache = new Dictionary<string, Sprite>();
 
-    private readonly Dictionary<int, string> latestIconByLayer = new Dictionary<int, string>();
+    private readonly Dictionary<int, RandomEventIconData> latestIconByLayer = new Dictionary<int, RandomEventIconData>();
     private RectTransform iconRowRect;
     private Image currentIconImage;
     private CanvasGroup currentIconCanvasGroup;
@@ -63,7 +66,7 @@ public sealed class RandomEventIconHistoryUI : MonoBehaviour
         iconRowRect.anchorMin = new Vector2(0.5f, 1f);
         iconRowRect.anchorMax = new Vector2(0.5f, 1f);
         iconRowRect.pivot = new Vector2(0.5f, 0.5f);
-        iconRowRect.sizeDelta = new Vector2(IconSize + 16f, IconSize + 12f);
+        iconRowRect.sizeDelta = new Vector2(IconSize + EventNamePanelWidth + 32f, IconSize + 12f);
 
         float barBottom = wellnessBarRect != null
             ? wellnessBarRect.anchoredPosition.y - wellnessBarRect.rect.height
@@ -79,10 +82,10 @@ public sealed class RandomEventIconHistoryUI : MonoBehaviour
         selectedLayer = layerNumber;
         ClearDisplayedIcons();
 
-        if (!latestIconByLayer.TryGetValue(selectedLayer, out string iconResource))
+        if (!latestIconByLayer.TryGetValue(selectedLayer, out RandomEventIconData latestIcon))
             return;
 
-        ShowIconImmediately(iconResource);
+        ShowIconImmediately(latestIcon.iconResource, latestIcon.eventName);
     }
 
     private void HandleRandomEventTriggered(RandomEventData eventData)
@@ -100,14 +103,19 @@ public sealed class RandomEventIconHistoryUI : MonoBehaviour
         if (string.IsNullOrEmpty(iconResource))
             return;
 
-        latestIconByLayer[eventLayer] = iconResource;
+        RandomEventIconData iconData = new RandomEventIconData(iconResource, eventData.eventName);
+        latestIconByLayer[eventLayer] = iconData;
         if (selectedLayer != eventLayer || iconRowRect == null)
             return;
 
         if (currentIconImage != null)
+        {
+            currentIconCanvasGroup.interactable = false;
+            currentIconCanvasGroup.blocksRaycasts = false;
             StartCoroutine(SlideOutAndRemove(currentIconImage.rectTransform, currentIconCanvasGroup));
+        }
 
-        CreateCurrentIcon(iconResource, true);
+        CreateCurrentIcon(iconData, true);
     }
 
     private string GetIconResource(RandomEventData eventData)
@@ -126,19 +134,19 @@ public sealed class RandomEventIconHistoryUI : MonoBehaviour
         }
     }
 
-    private void ShowIconImmediately(string iconResource)
+    private void ShowIconImmediately(string iconResource, string eventName)
     {
-        CreateCurrentIcon(iconResource, false);
+        CreateCurrentIcon(new RandomEventIconData(iconResource, eventName), false);
     }
 
-    private void CreateCurrentIcon(string iconResource, bool animateEntry)
+    private void CreateCurrentIcon(RandomEventIconData iconData, bool animateEntry)
     {
-        Sprite iconSprite = LoadIconSprite(iconResource);
+        Sprite iconSprite = LoadIconSprite(iconData.iconResource);
         if (iconSprite == null)
             return;
 
         GameObject iconObject = new GameObject("RandomEventIcon", typeof(RectTransform), typeof(CanvasRenderer),
-            typeof(Image), typeof(CanvasGroup));
+            typeof(Image), typeof(Button), typeof(CanvasGroup));
         iconObject.transform.SetParent(iconRowRect, false);
 
         RectTransform iconRect = iconObject.GetComponent<RectTransform>();
@@ -152,14 +160,65 @@ public sealed class RandomEventIconHistoryUI : MonoBehaviour
         currentIconImage = iconObject.GetComponent<Image>();
         currentIconImage.sprite = iconSprite;
         currentIconImage.preserveAspect = true;
-        currentIconImage.raycastTarget = false;
+        currentIconImage.raycastTarget = true;
+
+        Button iconButton = iconObject.GetComponent<Button>();
+        iconButton.targetGraphic = currentIconImage;
+        iconButton.transition = Selectable.Transition.None;
+        Text eventNameText = CreateEventNameLabel(iconObject.transform, iconData.eventName);
+        iconButton.onClick.AddListener(() =>
+        {
+            if (eventNameText != null)
+                eventNameText.transform.parent.gameObject.SetActive(!eventNameText.transform.parent.gameObject.activeSelf);
+        });
+
         currentIconCanvasGroup = iconObject.GetComponent<CanvasGroup>();
         currentIconCanvasGroup.alpha = animateEntry ? 0f : 1f;
-        currentIconCanvasGroup.interactable = false;
-        currentIconCanvasGroup.blocksRaycasts = false;
+        currentIconCanvasGroup.interactable = true;
+        currentIconCanvasGroup.blocksRaycasts = true;
 
         if (animateEntry)
             StartCoroutine(SlideIn(currentIconImage.rectTransform, currentIconCanvasGroup));
+    }
+
+    private Text CreateEventNameLabel(Transform iconTransform, string eventName)
+    {
+        GameObject panelObject = new GameObject("EventNamePanel", typeof(RectTransform),
+            typeof(CanvasRenderer), typeof(Image));
+        panelObject.transform.SetParent(iconTransform, false);
+
+        RectTransform panelRect = panelObject.GetComponent<RectTransform>();
+        panelRect.anchorMin = new Vector2(1f, 0.5f);
+        panelRect.anchorMax = new Vector2(1f, 0.5f);
+        panelRect.pivot = new Vector2(0f, 0.5f);
+        panelRect.anchoredPosition = new Vector2(IconSize * 0.5f + 8f, 0f);
+        panelRect.sizeDelta = new Vector2(EventNamePanelWidth, EventNamePanelHeight);
+
+        Image panelImage = panelObject.GetComponent<Image>();
+        panelImage.color = new Color(0.008f, 0.025f, 0.035f, 0.9f);
+        panelImage.raycastTarget = false;
+
+        GameObject labelObject = new GameObject("EventName", typeof(RectTransform),
+            typeof(CanvasRenderer), typeof(Text));
+        labelObject.transform.SetParent(panelObject.transform, false);
+        RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+        labelRect.anchorMin = Vector2.zero;
+        labelRect.anchorMax = Vector2.one;
+        labelRect.offsetMin = new Vector2(9f, 2f);
+        labelRect.offsetMax = new Vector2(-9f, -2f);
+
+        Text label = labelObject.GetComponent<Text>();
+        label.font = Resources.GetBuiltinResource<Font>(BuiltInFontName);
+        label.fontSize = 14;
+        label.fontStyle = FontStyle.Bold;
+        label.color = new Color(0.78f, 0.96f, 0.98f, 1f);
+        label.alignment = TextAnchor.MiddleLeft;
+        label.horizontalOverflow = HorizontalWrapMode.Overflow;
+        label.verticalOverflow = VerticalWrapMode.Truncate;
+        label.text = eventName;
+        label.raycastTarget = false;
+        panelObject.SetActive(false);
+        return label;
     }
 
     private Sprite LoadIconSprite(string resourcePath)
@@ -232,5 +291,17 @@ public sealed class RandomEventIconHistoryUI : MonoBehaviour
 
         for (int index = iconRowRect.childCount - 1; index >= 0; index--)
             Destroy(iconRowRect.GetChild(index).gameObject);
+    }
+
+    private struct RandomEventIconData
+    {
+        public readonly string iconResource;
+        public readonly string eventName;
+
+        public RandomEventIconData(string iconResource, string eventName)
+        {
+            this.iconResource = iconResource;
+            this.eventName = eventName;
+        }
     }
 }
