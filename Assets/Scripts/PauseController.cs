@@ -21,6 +21,15 @@ public class PauseController : MonoBehaviour
             pauseRaycastBlocker.SetActive(false);
     }
 
+    private void Start()
+    {
+        Transform hudCanvas = GameObject.Find("HUDCanvas")?.transform;
+        RectTransform pauseButtonRect = hudCanvas != null
+            ? hudCanvas.Find("PauseButton") as RectTransform
+            : null;
+        SlideshowManualScreen.AddGameMenuEntry(hudCanvas, pauseButtonRect);
+    }
+
     private void CreatePauseRaycastBlocker()
     {
         if (pausePanel == null || pausePanel.transform.parent == null)

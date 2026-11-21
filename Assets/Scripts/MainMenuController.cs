@@ -88,10 +88,8 @@ public class MainMenuController : MonoBehaviour
             menuCanvas = FindFirstObjectByType<Canvas>();
         }
 
-        if (menuCanvas != null)
-        {
-            SlideshowManualScreen.AddMenuEntry(menuCanvas.transform, ShowManual, manualButtonTexture);
-        }
+        SlideshowManualScreen.ConfigureManual(manualButtonTexture, manualHomeTexture, unitManualSlides,
+            mapManualSlides, pathogenManualSlides, gameplayManualSlides);
     }
 
     /// <summary>

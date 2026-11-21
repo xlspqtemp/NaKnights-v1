@@ -64,6 +64,59 @@ public static class SlideshowManualScreen
     private static Texture2D[] mapTextures;
     private static Texture2D[] pathogenTextures;
     private static Texture2D[] gameplayTextures;
+    private static Texture2D menuIconTexture;
+
+    /// <summary>
+    /// Stores the manual artwork so the gameplay HUD can open the same slideshow.
+    /// </summary>
+    public static void ConfigureManual(Texture2D iconTexture, Texture2D manualHomeTexture,
+        Texture2D[] unitSlides, Texture2D[] mapSlides, Texture2D[] pathogenSlides, Texture2D[] gameplaySlides)
+    {
+        menuIconTexture = iconTexture;
+        homeTexture = manualHomeTexture;
+        unitTextures = unitSlides;
+        mapTextures = mapSlides;
+        pathogenTextures = pathogenSlides;
+        gameplayTextures = gameplaySlides;
+    }
+
+    /// <summary>
+    /// Adds a manual icon immediately to the left of the gameplay pause button.
+    /// </summary>
+    public static void AddGameMenuEntry(Transform canvas, RectTransform pauseButtonRect)
+    {
+        if (canvas == null || pauseButtonRect == null || menuIconTexture == null || homeTexture == null ||
+            canvas.Find("ManualEntryButton") != null)
+        {
+            return;
+        }
+
+        GameObject entryObject = new GameObject("ManualEntryButton", typeof(RectTransform), typeof(RawImage), typeof(Button));
+        entryObject.transform.SetParent(canvas, false);
+
+        float iconSize = Mathf.Min(pauseButtonRect.rect.width, pauseButtonRect.rect.height);
+        RectTransform entryRect = entryObject.GetComponent<RectTransform>();
+        SetRect(entryRect, Vector2.one, Vector2.one, Vector2.one,
+            new Vector2(pauseButtonRect.anchoredPosition.x - pauseButtonRect.rect.width - 10f,
+                pauseButtonRect.anchoredPosition.y), new Vector2(iconSize, iconSize));
+
+        RawImage iconImage = entryObject.GetComponent<RawImage>();
+        iconImage.texture = menuIconTexture;
+        iconImage.color = Color.white;
+        iconImage.raycastTarget = true;
+
+        Button entryButton = entryObject.GetComponent<Button>();
+        ConfigureButton(entryButton, iconImage, () => ShowConfigured(canvas), Color.white,
+            new Color(0.72f, 1f, 1f, 1f), new Color(0.48f, 0.9f, 0.92f, 1f));
+    }
+
+    /// <summary>
+    /// Opens the configured manual slideshow over the supplied canvas.
+    /// </summary>
+    public static void ShowConfigured(Transform canvas)
+    {
+        Show(canvas, homeTexture, unitTextures, mapTextures, pathogenTextures, gameplayTextures);
+    }
 
     /// <summary>
     /// Adds the supplied manual icon as a clickable entry at the top-right of the canvas.

@@ -40,6 +40,7 @@ internal static class LayerSelectionHUD
     private static Outline[] layerButtonOutlines;
     private static RectTransform layerRowsRoot;
     private static HashSet<string>[] activeThreatKeys;
+    private static RandomEventIconHistoryUI randomEventIconHistoryUI;
     private static readonly Dictionary<string, int> ActiveThreatLayers = new Dictionary<string, int>();
     private static int selectedLayer = 1;
 
@@ -64,6 +65,7 @@ internal static class LayerSelectionHUD
         layerButtonInfoBackgrounds = null;
         layerButtonOutlines = null;
         layerRowsRoot = null;
+        randomEventIconHistoryUI = null;
         if (scene.name != GameSceneName)
             return;
 
@@ -94,6 +96,13 @@ internal static class LayerSelectionHUD
         if (responsiveLayout == null)
             responsiveLayout = canvas.gameObject.AddComponent<ResponsiveHudLayout>();
         responsiveLayout.Configure(snapshotPanel, controlsRoot, dayPanel, consolePanel, layerRowsRoot, toggleRect);
+
+        randomEventIconHistoryUI = canvas.GetComponent<RandomEventIconHistoryUI>();
+        if (randomEventIconHistoryUI == null)
+            randomEventIconHistoryUI = canvas.gameObject.AddComponent<RandomEventIconHistoryUI>();
+        randomEventIconHistoryUI.Initialize(canvas.transform as RectTransform,
+            canvas.transform.Find("GameProgressBar") as RectTransform);
+
         SetSelectedLayer(1);
         RandomEventSystem.OnRandomEventTriggered -= HandleRandomEventTriggered;
         RandomEventSystem.OnRandomEventTriggered += HandleRandomEventTriggered;
@@ -519,6 +528,8 @@ internal static class LayerSelectionHUD
             return;
 
         selectedLayer = layerNumber;
+        if (randomEventIconHistoryUI != null)
+            randomEventIconHistoryUI.SetSelectedLayer(layerNumber);
         RefreshLayerButtonVisuals(Time.unscaledTime);
     }
 }
