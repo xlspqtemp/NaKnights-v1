@@ -66,6 +66,7 @@ public class MainMenuController : MonoBehaviour
     private Image[] difficultyOptionBackgrounds;
     private Image[] difficultyOptionIcons;
     private Outline[] difficultyOptionOutlines;
+    private Text[] difficultyOptionLockLabels;
     private TextMeshProUGUI descriptionText;
     private ScrollRect difficultyInfoScrollRect;
     private TMP_FontAsset difficultyInfoFont;
@@ -204,6 +205,7 @@ public class MainMenuController : MonoBehaviour
         difficultyOptionBackgrounds = new Image[optionLabels.Length];
         difficultyOptionIcons = new Image[optionLabels.Length];
         difficultyOptionOutlines = new Outline[optionLabels.Length];
+        difficultyOptionLockLabels = new Text[optionLabels.Length];
         Sprite[] difficultyIcons =
         {
             LoadDifficultyIcon(EasyDifficultyIconResourcePath),
@@ -247,6 +249,11 @@ public class MainMenuController : MonoBehaviour
             difficultyOptionButtons[index] = button;
             difficultyOptionBackgrounds[index] = button.GetComponent<Image>();
             difficultyOptionOutlines[index] = outline;
+            Text lockLabel = CreateText(button.transform, "DifficultyLockedLabel", "LOCKED", 12,
+                FontStyle.Bold, MutedTextColor, TextAnchor.MiddleCenter, new Vector2(0f, -18f),
+                new Vector2(148f, 24f));
+            lockLabel.gameObject.SetActive(false);
+            difficultyOptionLockLabels[index] = lockLabel;
         }
 
         CreateDifficultyInfoPanel(parent);
@@ -394,8 +401,11 @@ public class MainMenuController : MonoBehaviour
 
     private void SetSelectedDifficulty(int optionIndex)
     {
-        if (difficultyOptionButtons == null || optionIndex < 0 || optionIndex >= difficultyOptionButtons.Length)
+        if (difficultyOptionButtons == null || optionIndex < 0 || optionIndex >= difficultyOptionButtons.Length ||
+            !DifficultySettings.IsDifficultyUnlocked(optionIndex))
+        {
             return;
+        }
 
         selectedDifficultyIndex = optionIndex;
         DifficultySettings.ConfigureStats(difficultyStats);
@@ -403,15 +413,20 @@ public class MainMenuController : MonoBehaviour
         for (int index = 0; index < difficultyOptionButtons.Length; index++)
         {
             bool isSelected = index == selectedDifficultyIndex;
-            difficultyOptionBackgrounds[index].color = isSelected ? SelectedDifficultyColor : ButtonColor;
+            bool isUnlocked = DifficultySettings.IsDifficultyUnlocked(index);
+            difficultyOptionBackgrounds[index].color = isUnlocked
+                ? isSelected ? SelectedDifficultyColor : ButtonColor
+                : new Color(0.035f, 0.045f, 0.052f, 0.92f);
             difficultyOptionOutlines[index].enabled = isSelected;
             if (difficultyOptionIcons[index] != null)
             {
-                Color iconColor = Color.white;
-                iconColor.a = isSelected ? 1f : 0.78f;
+                Color iconColor = isUnlocked ? Color.white : MutedTextColor;
+                iconColor.a = isUnlocked ? (isSelected ? 1f : 0.78f) : 0.38f;
                 difficultyOptionIcons[index].color = iconColor;
             }
-            difficultyOptionButtons[index].interactable = true;
+            difficultyOptionButtons[index].interactable = isUnlocked;
+            if (difficultyOptionLockLabels[index] != null)
+                difficultyOptionLockLabels[index].gameObject.SetActive(!isUnlocked);
         }
 
         RefreshDifficultyInfoPanel();

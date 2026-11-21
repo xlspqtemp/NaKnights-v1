@@ -758,6 +758,7 @@ public class WellnessManager : MonoBehaviour
 
         if (result == WellnessRunResult.PerfectWin || result == WellnessRunResult.Win)
         {
+            DifficultySettings.RecordWinningRun(DifficultySettings.SelectedDifficultyIndex, currentWellness);
             LogToConsole(resultMessage, ConsoleLogUI.LogType.Success);
             OnGameWon?.Invoke(result);
             onGameWon?.Invoke(result);

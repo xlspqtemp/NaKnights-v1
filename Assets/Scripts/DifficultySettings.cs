@@ -82,8 +82,11 @@ public static class DifficultySettings
     private const string DefenseLevelKey = "Difficulty.Defense";
     private const string RandomEventsLevelKey = "Difficulty.RandomEvents";
     private const string SelectedPresetKey = "Difficulty.SelectedPreset";
+    private const string AccountUnlockIndexKeyPrefix = "Difficulty.UnlockedPreset.";
     private const int DifficultyPresetCount = 4;
+    private const int FirstLockedDifficultyIndex = 2;
     private const int HardDifficultyIndex = 3;
+    private const float HardUnlockMinimumWellnessExclusive = 50f;
     private const float HardDifficultyWbcHp = 80f;
     private const float HardDifficultyWbcAttack = 8f;
     private const float DefaultInnateVariantSpecialistDamageMultiplier = 3f;
@@ -114,7 +117,55 @@ public static class DifficultySettings
     };
     private static DifficultyStats[] configuredPresets;
 
-    public static int SelectedDifficultyIndex => Mathf.Clamp(PlayerPrefs.GetInt(SelectedPresetKey, 1), 0, DifficultyPresetCount - 1);
+    public static int SelectedDifficultyIndex => Mathf.Clamp(
+        PlayerPrefs.GetInt(SelectedPresetKey, 1), 0, GetHighestUnlockedDifficultyIndex());
+
+    /// <summary>Returns the highest difficulty currently unlocked for this account or guest session.</summary>
+    public static int GetHighestUnlockedDifficultyIndex()
+    {
+        if (LeaderboardManager.IsActiveGuestSession())
+            return DifficultyPresetCount - 1;
+
+        string playerId = LeaderboardManager.GetActiveWhiteLabelPlayerId();
+        if (string.IsNullOrWhiteSpace(playerId))
+            return FirstLockedDifficultyIndex - 1;
+
+        return Mathf.Clamp(PlayerPrefs.GetInt(AccountUnlockIndexKeyPrefix + playerId, 1),
+            1, DifficultyPresetCount - 1);
+    }
+
+    /// <summary>Returns whether a difficulty preset is available in the active session.</summary>
+    public static bool IsDifficultyUnlocked(int difficultyIndex)
+    {
+        return difficultyIndex >= 0 && difficultyIndex <= GetHighestUnlockedDifficultyIndex();
+    }
+
+    /// <summary>Records difficulty unlock progression for a winning White Label account run.</summary>
+    public static void RecordWinningRun(int difficultyIndex, float finalWellness)
+    {
+        if (LeaderboardManager.IsActiveGuestSession())
+            return;
+
+        string playerId = LeaderboardManager.GetActiveWhiteLabelPlayerId();
+        if (string.IsNullOrWhiteSpace(playerId))
+            return;
+
+        int highestUnlockedIndex = Mathf.Clamp(
+            PlayerPrefs.GetInt(AccountUnlockIndexKeyPrefix + playerId, 1),
+            1, DifficultyPresetCount - 1);
+        int updatedHighestIndex = highestUnlockedIndex;
+
+        if (difficultyIndex == 1)
+            updatedHighestIndex = Mathf.Max(updatedHighestIndex, 2);
+        else if (difficultyIndex == 2 && finalWellness > HardUnlockMinimumWellnessExclusive)
+            updatedHighestIndex = Mathf.Max(updatedHighestIndex, HardDifficultyIndex);
+
+        if (updatedHighestIndex != highestUnlockedIndex)
+        {
+            PlayerPrefs.SetInt(AccountUnlockIndexKeyPrefix + playerId, updatedHighestIndex);
+            PlayerPrefs.Save();
+        }
+    }
 
     /// <summary>Returns the configured per-difficulty selection weight for a named Allergen or Parasite profile.</summary>
     public static float GetNewPathogenProfileWeightPercent(InfectionPathogenType pathogenType, string profileName, int difficultyIndex)
@@ -191,7 +242,7 @@ public static class DifficultySettings
 
     public static void SaveSelectedDifficulty(int index)
     {
-        PlayerPrefs.SetInt(SelectedPresetKey, Mathf.Clamp(index, 0, DifficultyPresetCount - 1));
+        PlayerPrefs.SetInt(SelectedPresetKey, Mathf.Clamp(index, 0, GetHighestUnlockedDifficultyIndex()));
         PlayerPrefs.Save();
     }
 

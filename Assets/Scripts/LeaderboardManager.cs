@@ -238,6 +238,22 @@ public class LeaderboardManager : MonoBehaviour
         return PlayerPrefs.GetInt(LocalGuestSessionKey, 0) == 1;
     }
 
+    /// <summary>Returns whether the active session is a local or LootLocker guest session.</summary>
+    public static bool IsActiveGuestSession()
+    {
+        if (IsLocalGuestSession())
+            return true;
+
+        return TryGetActivePlayer(out _, out LootLockerPlayerData playerData) &&
+            string.Equals(playerData.CurrentPlatform.Platform.ToString(), "Guest", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Returns the active White Label account id for account-specific local progression.</summary>
+    public static string GetActiveWhiteLabelPlayerId()
+    {
+        return TryGetWhiteLabelPlayer(out string playerUlid) ? playerUlid : string.Empty;
+    }
+
     /// <summary>Returns whether the active account has completed its tutorial.</summary>
     public static bool HasSeenTutorialForActiveSession()
     {
