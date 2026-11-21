@@ -13,6 +13,13 @@ public sealed class AdaptiveResponsePopup : MonoBehaviour
     private const float MinimumWellnessGap = 30f;
     private const float HudSfxVolume = 0.65f;
     private const string BankGothicResourcePath = "BankGothicMediumSDF";
+    private const string BacterialIconResourcePath = "UI/Red bacteria icon";
+    private const string ViralIconResourcePath = "UI/Blue virus icon";
+    private const string FungalIconResourcePath = "UI/Neon_Circuit_Mushroom_Emblem-removebg-preview";
+    private const string AllergenIconResourcePath = "UI/Allergen icon";
+    private const string ParasiteIconResourcePath = "UI/Parasite icon";
+    private const float PathogenIconSize = 58f;
+    private static readonly Dictionary<InfectionPathogenType, Sprite> PathogenIconCache = new Dictionary<InfectionPathogenType, Sprite>();
     private static readonly Vector2 PopupSize = new Vector2(700f, 90f);
     private static readonly Color BackgroundColor = new Color(0.025f, 0.045f, 0.065f, 0.96f);
     private static readonly Color AccentColor = new Color(0.15f, 0.78f, 0.8f, 1f);
@@ -23,12 +30,22 @@ public sealed class AdaptiveResponsePopup : MonoBehaviour
     {
         public string title;
         public string subtitle;
+        public string message;
+        public Sprite icon;
 
         public PopupMessage(string title, string subtitle)
         {
             this.title = title;
             this.subtitle = subtitle;
         }
+
+        public PopupMessage(string message, Sprite icon)
+        {
+            this.message = message;
+            this.icon = icon;
+        }
+
+        public bool IsInlineMessage => !string.IsNullOrEmpty(message);
     }
 
     private readonly Queue<PopupMessage> pendingMessages = new Queue<PopupMessage>();
@@ -36,6 +53,8 @@ public sealed class AdaptiveResponsePopup : MonoBehaviour
     private AudioSource audioSource;
     private TextMeshProUGUI titleLabel;
     private TextMeshProUGUI subtitleLabel;
+    private TextMeshProUGUI messageLabel;
+    private Image pathogenIconImage;
     private float animationElapsed;
     private PopupPhase phase;
 
@@ -76,6 +95,20 @@ public sealed class AdaptiveResponsePopup : MonoBehaviour
         gameObject.SetActive(false);
     }
 
+    /// <summary>Queues the pathogen appearance message using its matching HUD icon.</summary>
+    public void ShowPathogenAppeared(string pathogenName, InfectionPathogenType pathogenType)
+    {
+        string resolvedName = string.IsNullOrWhiteSpace(pathogenName) ? "Pathogen" : pathogenName;
+        EnqueueMessage("A " + resolvedName + " has appeared!", LoadPathogenIcon(pathogenType));
+    }
+
+    /// <summary>Queues the antigen collection message using the same icon-first HUD popup.</summary>
+    public void ShowAntigenCollected(string pathogenName, InfectionPathogenType pathogenType)
+    {
+        string resolvedName = string.IsNullOrWhiteSpace(pathogenName) ? "Pathogen" : pathogenName;
+        EnqueueMessage("A " + resolvedName + " antigen has been collected!", LoadPathogenIcon(pathogenType));
+    }
+
     /// <summary>Queues an adaptive-response resolution message and plays its HUD sound once when shown.</summary>
     public void Show(string displayName)
     {
@@ -83,11 +116,10 @@ public sealed class AdaptiveResponsePopup : MonoBehaviour
         EnqueueMessage("ADAPTIVE RESPONSE CLEARED", $"{resolvedName} resolved by the body. Good work, soldier.");
     }
 
-    /// <summary>Queues the antigen collection message using the shared HUD popup banner.</summary>
+    /// <summary>Queues a viral antigen collection message using the shared icon-first HUD popup.</summary>
     public void ShowAntigenCollected(string virusName)
     {
-        string resolvedName = string.IsNullOrWhiteSpace(virusName) ? "Virus" : virusName;
-        EnqueueMessage("ANTIGEN COLLECTED", $"{resolvedName} antigen acquired. T-Cell training unlocked.");
+        ShowAntigenCollected(virusName, InfectionPathogenType.Viral);
     }
 
     private void EnqueueMessage(string title, string subtitle)
@@ -95,6 +127,47 @@ public sealed class AdaptiveResponsePopup : MonoBehaviour
         pendingMessages.Enqueue(new PopupMessage(title, subtitle));
         if (phase == PopupPhase.Hidden)
             BeginNextPopup();
+    }
+
+    private void EnqueueMessage(string message, Sprite icon)
+    {
+        pendingMessages.Enqueue(new PopupMessage(message, icon));
+        if (phase == PopupPhase.Hidden)
+            BeginNextPopup();
+    }
+
+    private static Sprite LoadPathogenIcon(InfectionPathogenType pathogenType)
+    {
+        if (PathogenIconCache.TryGetValue(pathogenType, out Sprite cachedIcon))
+            return cachedIcon;
+
+        string resourcePath;
+        switch (pathogenType)
+        {
+            case InfectionPathogenType.Viral: resourcePath = ViralIconResourcePath; break;
+            case InfectionPathogenType.Fungal: resourcePath = FungalIconResourcePath; break;
+            case InfectionPathogenType.Allergen: resourcePath = AllergenIconResourcePath; break;
+            case InfectionPathogenType.Parasite: resourcePath = ParasiteIconResourcePath; break;
+            default: resourcePath = BacterialIconResourcePath; break;
+        }
+
+        Sprite icon = Resources.Load<Sprite>(resourcePath);
+        if (icon == null)
+        {
+            Texture2D texture = Resources.Load<Texture2D>(resourcePath);
+            if (texture != null)
+            {
+                icon = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                    new Vector2(0.5f, 0.5f), 100f);
+                icon.name = resourcePath + " HUD Sprite";
+            }
+        }
+
+        if (icon == null)
+            Debug.LogWarning("Pathogen message icon was not found at Resources/" + resourcePath + ".png");
+        else
+            PathogenIconCache[pathogenType] = icon;
+        return icon;
     }
 
     private void Update()
@@ -144,8 +217,21 @@ public sealed class AdaptiveResponsePopup : MonoBehaviour
         }
 
         PopupMessage message = pendingMessages.Dequeue();
-        titleLabel.text = message.title;
-        subtitleLabel.text = message.subtitle;
+        bool showInlineMessage = message.IsInlineMessage;
+        titleLabel.gameObject.SetActive(!showInlineMessage);
+        subtitleLabel.gameObject.SetActive(!showInlineMessage);
+        messageLabel.gameObject.SetActive(showInlineMessage);
+        pathogenIconImage.gameObject.SetActive(showInlineMessage && message.icon != null);
+        if (showInlineMessage)
+        {
+            messageLabel.text = message.message;
+            pathogenIconImage.sprite = message.icon;
+        }
+        else
+        {
+            titleLabel.text = message.title;
+            subtitleLabel.text = message.subtitle;
+        }
         popupCanvasGroup.alpha = 0f;
         animationElapsed = 0f;
         phase = PopupPhase.FadingIn;
@@ -186,6 +272,26 @@ public sealed class AdaptiveResponsePopup : MonoBehaviour
         subtitleLabel = CreateLabel("Subtitle", Vector2.zero, new Vector2(1f, 0.5f),
             new Vector2(18f, 4f), new Vector2(-14f, 0f), 14f, FontStyles.Normal, Color.white,
             TextAlignmentOptions.MidlineLeft, true);
+        subtitleLabel.gameObject.SetActive(false);
+
+        GameObject pathogenIconObject = new GameObject("Pathogen Icon", typeof(RectTransform),
+            typeof(CanvasRenderer), typeof(Image));
+        pathogenIconObject.transform.SetParent(transform, false);
+        RectTransform pathogenIconRect = pathogenIconObject.GetComponent<RectTransform>();
+        pathogenIconRect.anchorMin = new Vector2(0f, 0.5f);
+        pathogenIconRect.anchorMax = new Vector2(0f, 0.5f);
+        pathogenIconRect.pivot = new Vector2(0f, 0.5f);
+        pathogenIconRect.anchoredPosition = new Vector2(18f, 0f);
+        pathogenIconRect.sizeDelta = new Vector2(PathogenIconSize, PathogenIconSize);
+        pathogenIconImage = pathogenIconObject.GetComponent<Image>();
+        pathogenIconImage.preserveAspect = true;
+        pathogenIconImage.raycastTarget = false;
+        pathogenIconObject.SetActive(false);
+
+        messageLabel = CreateLabel("Pathogen Message", Vector2.zero, Vector2.one,
+            new Vector2(92f, 0f), new Vector2(-18f, 0f), 20f, FontStyles.Bold, Color.white,
+            TextAlignmentOptions.MidlineLeft, false);
+        messageLabel.gameObject.SetActive(false);
     }
 
     private TextMeshProUGUI CreateLabel(string objectName, Vector2 anchorMin, Vector2 anchorMax,

@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Reflection;
 using TMPro;
 using UnityEngine;
 using UnityEngine.AI;
@@ -95,12 +94,6 @@ public sealed class InfectionSpawner : MonoBehaviour
     private const string AllergenNotificationIconResourcePath = "UI/Allergen icon";
     private const string ParasiteNotificationIconResourcePath = "UI/Parasite icon";
     private const string InfectionNotificationObjectPrefix = "Infection Notification - ";
-    private const string AntigenCollectedTitle = "ANTIGEN COLLECTED";
-    private const string AntigenCollectedSubtitleFormat = "{0} antigen acquired. T-Cell training unlocked.";
-    private const string AntigenAlreadyAcquiredTitle = "ANTIGEN ALREADY ACQUIRED";
-    private const string AntigenAlreadyAcquiredSubtitleFormat = "{0} T-Cell is already unlocked in the Lymphatic Factory.";
-    private const string AdaptiveResponsePopupEnqueueMessageMethodName = "EnqueueMessage";
-    private const BindingFlags AdaptiveResponsePopupMessageMethodFlags = BindingFlags.Instance | BindingFlags.NonPublic;
     private const int NotificationSpritePixelsPerUnit = 1024;
     private const float AntigenNotificationIconScale = 0.65f;
     private const float AntigenIconHeightOffset = 2f;
@@ -3071,7 +3064,10 @@ public sealed class InfectionSpawner : MonoBehaviour
         bool antigenAlreadyUnlocked = IsAntigenUnlocked(collection.antigenName);
         if (!antigenAlreadyUnlocked)
             Databank.AddAntigen(collection.antigenName);
-        ShowAntigenPopup(collection.antigenName, antigenAlreadyUnlocked);
+        ShowAntigenPopup(collection.antigenName,
+            collection.infectionMarker != null && collection.infectionMarker.infection != null
+                ? collection.infectionMarker.infection.pathogenType
+                : InfectionPathogenType.Viral);
         if (collection.dendriticCell != null)
             Destroy(collection.dendriticCell);
         if (collection.icon != null)
@@ -5213,6 +5209,10 @@ public sealed class InfectionSpawner : MonoBehaviour
         };
 
         activeInfectionMarkers.Add(marker);
+        if (adaptiveResponsePopup == null)
+            CreateAdaptiveResponsePopup();
+        if (adaptiveResponsePopup != null)
+            adaptiveResponsePopup.ShowPathogenAppeared(infection.displayName, infection.pathogenType);
         SpawnInfectionThreatVisuals(marker);
         if (bodyPartButton.button != null)
         {
@@ -5680,31 +5680,18 @@ public sealed class InfectionSpawner : MonoBehaviour
         return text;
     }
 
-    private void ShowAntigenPopup(string virusName, bool antigenAlreadyUnlocked)
+    private void ShowAntigenPopup(string pathogenName, InfectionPathogenType pathogenType)
     {
         if (adaptiveResponsePopup == null)
             CreateAdaptiveResponsePopup();
 
         if (adaptiveResponsePopup == null)
         {
-            Debug.LogWarning("[InfectionSpawner] Cannot show the antigen collection banner because AdaptiveResponsePopup is unavailable.", this);
+            Debug.LogWarning("[InfectionSpawner] Cannot show the antigen collection message because AdaptiveResponsePopup is unavailable.", this);
             return;
         }
 
-        string resolvedName = string.IsNullOrWhiteSpace(virusName) ? "Virus" : virusName;
-        string title = antigenAlreadyUnlocked ? AntigenAlreadyAcquiredTitle : AntigenCollectedTitle;
-        string subtitle = antigenAlreadyUnlocked
-            ? string.Format(AntigenAlreadyAcquiredSubtitleFormat, resolvedName)
-            : string.Format(AntigenCollectedSubtitleFormat, resolvedName);
-        MethodInfo enqueueMessageMethod = typeof(AdaptiveResponsePopup).GetMethod(
-            AdaptiveResponsePopupEnqueueMessageMethodName, AdaptiveResponsePopupMessageMethodFlags);
-        if (enqueueMessageMethod == null)
-        {
-            Debug.LogWarning("[InfectionSpawner] Cannot show the antigen collection banner because its message queue is unavailable.", this);
-            return;
-        }
-
-        enqueueMessageMethod.Invoke(adaptiveResponsePopup, new object[] { title, subtitle });
+        adaptiveResponsePopup.ShowAntigenCollected(pathogenName, pathogenType);
     }
 
     private void UpdateSelectedInfectionPopup()

@@ -116,12 +116,18 @@ public sealed class BacteriaOutbreakController : MonoBehaviour
                 bacteriaAgent = bacteriaObject.AddComponent<BacteriaAgent>();
             }
 
-            if (bacteriaNavMeshAgent == null || bacteriaAgent == null ||
-                !bacteriaAgent.InitializeStationary(bacteriaNavMeshAgent, spawnHit.position, eventKey))
+            bool bacteriaSpawned = bacteriaNavMeshAgent != null && bacteriaAgent != null &&
+                bacteriaAgent.InitializeStationary(bacteriaNavMeshAgent, spawnHit.position, eventKey);
+            if (!bacteriaSpawned)
             {
                 Debug.LogWarning($"Bacteria '{bacteriaObject.name}' could not be placed as a stationary NavMesh target.", bacteriaObject);
                 Destroy(bacteriaObject);
+                continue;
             }
+
+            AdaptiveResponsePopup pathogenPopup = FindFirstObjectByType<AdaptiveResponsePopup>();
+            if (pathogenPopup != null)
+                pathogenPopup.ShowPathogenAppeared("Bacteria", InfectionPathogenType.Bacterial);
         }
     }
 
