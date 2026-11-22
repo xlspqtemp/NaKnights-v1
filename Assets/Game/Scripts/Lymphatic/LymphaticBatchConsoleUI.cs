@@ -21,12 +21,13 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
     private const string BasophilVariantName = "BASOPHIL";
     private const string EosinophilDisplayName = "Eosinophil";
     private const string BasophilDisplayName = "Basophil";
-    private const float IconSize = 88f;
+    private const float IconSize = 144f;
     private const float NeutrophilVariantLongPressDuration = 0.5f;
     private const int NoActivePointerId = int.MinValue;
     private const float FollowZoom = 18f;
+    private const float MinimumProgressEstimateSeconds = 0.05f;
     private const string FontResourcePath = "BankGothicMediumSDF";
-    private const string HeadshotContainerResourcePath = "UI/Headshot container";
+
     private const string FollowCommandIconResourcePath = "UI/Follow command icon";
     private const string AbortCommandIconResourcePath = "UI/Abort target icon";
     private const string DestroyCommandIconResourcePath = "UI/Destroy batches icon";
@@ -34,15 +35,18 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
     private const string TCellIconResourcePath = "UI/Killet t cell headshot icon";
     private const string MacrophageIconResourcePath = "UI/Macrophage Headshot icon";
     private const string NeutrophilIconResourcePath = "UI/WBC HEADSHOT ICON";
-    private const float BatchPanelWidth = 1030f;
-    private const float BatchPanelHeight = 220f;
+    private const float BatchPanelWidth = 1580f;
+    private const float BatchPanelHeight = 300f;
     private const float BatchPanelLeft = 104f;
     private const float BatchPanelBottom = 64f;
-    private const float SlotHorizontalSpacing = 96f;
-    private const float CommandButtonSize = 48f;
-    private const float CommandButtonBottom = 112f;
+    private const float SlotHorizontalSpacing = 152f;
+    private const float RoundedSlotTextureSize = 128f;
+    private const float RoundedSlotCornerRadius = 22f;
+    private const float RoundedSlotBorderThickness = 4f;
+    private const float CommandButtonSize = 64f;
+    private const float CommandButtonBottom = 160f;
     private static Sprite solidColorSprite;
-    private static Sprite headshotContainerSprite;
+    private static Sprite roundedSlotSprite;
     private static Sprite followCommandIconSprite;
     private static Sprite abortCommandIconSprite;
     private static Sprite destroyCommandIconSprite;
@@ -56,7 +60,8 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
     private static readonly Color AccentColor = new Color(0.12f, 0.84f, 0.91f, 1f);
     private static readonly Color MainTextColor = new Color(0.9f, 0.96f, 0.97f, 1f);
     private static readonly Color MutedTextColor = new Color(0.55f, 0.74f, 0.78f, 1f);
-    private static readonly Color EmptySlotColor = Color.black;
+    private static readonly Color SelectedOutlineColor = new Color(0.72f, 0.79f, 0.83f, 0.95f);
+
     private static readonly Color ActiveSlotColor = new Color(0.035f, 0.095f, 0.12f, 1f);
     private static readonly Color SelectedSlotColor = new Color(0.06f, 0.32f, 0.36f, 1f);
     private static readonly Color FollowingSlotColor = new Color(0.08f, 0.3f, 0.15f, 1f);
@@ -96,10 +101,19 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
     {
         public Button Button;
         public Image Background;
+        public Outline SelectionOutline;
         public Image Icon;
         public TextMeshProUGUI NameLabel;
         public TextMeshProUGUI StatusLabel;
         public TextMeshProUGUI TravelTimeLabel;
+        public Image TravelTimeProgressFill;
+        public RectTransform TravelTimeProgressFillRect;
+        public RectTransform TravelTimeProgressRoot;
+        public float TravelTimeProgressWidth;
+        public float InitialTravelTimeEstimate;
+        public float RemainingTravelTimeEstimate;
+        public LymphaticBatchGroup TrackedBatch;
+        public bool WasMobilizing;
         public bool IsLongPressPending;
         public bool SuppressNextClick;
         public int LongPressPointerId = NoActivePointerId;
@@ -602,11 +616,59 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
         return sprite;
     }
 
-    private static Sprite GetHeadshotContainerSprite()
+    private static Sprite GetRoundedSlotSprite()
     {
-        if (headshotContainerSprite == null)
-            headshotContainerSprite = LoadIconSprite(HeadshotContainerResourcePath);
-        return headshotContainerSprite;
+        if (roundedSlotSprite != null)
+            return roundedSlotSprite;
+
+        int textureSize = Mathf.RoundToInt(RoundedSlotTextureSize);
+        Texture2D texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false)
+        {
+            name = "RuntimeRoundedBatchSlotTexture",
+            filterMode = FilterMode.Bilinear,
+            wrapMode = TextureWrapMode.Clamp,
+            hideFlags = HideFlags.HideAndDontSave
+        };
+        Color32[] pixels = new Color32[textureSize * textureSize];
+        Color32 fillColor = new Color32(12, 14, 18, 255);
+        Color32 borderColor = new Color32(84, 98, 108, 255);
+        float halfSize = textureSize * 0.5f;
+        float innerHalfSize = halfSize - RoundedSlotCornerRadius;
+
+        for (int y = 0; y < textureSize; y++)
+        {
+            for (int x = 0; x < textureSize; x++)
+            {
+                float qx = Mathf.Abs(x + 0.5f - halfSize) - innerHalfSize;
+                float qy = Mathf.Abs(y + 0.5f - halfSize) - innerHalfSize;
+                float outsideX = Mathf.Max(qx, 0f);
+                float outsideY = Mathf.Max(qy, 0f);
+                float distance = Mathf.Sqrt(outsideX * outsideX + outsideY * outsideY) +
+                    Mathf.Min(Mathf.Max(qx, qy), 0f) - RoundedSlotCornerRadius;
+                Color32 pixelColor;
+                if (distance <= -RoundedSlotBorderThickness)
+                    pixelColor = fillColor;
+                else if (distance <= 0f)
+                    pixelColor = borderColor;
+                else
+                {
+                    byte alpha = (byte)Mathf.RoundToInt(Mathf.Clamp01(0.5f - distance) * 255f);
+                    pixelColor = new Color32(borderColor.r, borderColor.g, borderColor.b, alpha);
+                }
+
+                pixels[y * textureSize + x] = pixelColor;
+            }
+        }
+
+        texture.SetPixels32(pixels);
+        texture.Apply(false, false);
+        roundedSlotSprite = Sprite.Create(texture, new Rect(0f, 0f, textureSize, textureSize),
+            new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect,
+            new Vector4(RoundedSlotCornerRadius, RoundedSlotCornerRadius,
+                RoundedSlotCornerRadius, RoundedSlotCornerRadius));
+        roundedSlotSprite.name = "RuntimeRoundedBatchSlot";
+        roundedSlotSprite.hideFlags = HideFlags.HideAndDontSave;
+        return roundedSlotSprite;
     }
 
     private static Sprite GetUnitIcon(string unitType)
@@ -647,19 +709,50 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
         SetRect(iconRect, Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(slotLeft, 0f), new Vector2(IconSize, IconSize));
         Image background = iconObject.GetComponent<Image>();
-        background.sprite = GetHeadshotContainerSprite();
+        background.sprite = GetRoundedSlotSprite();
+        background.type = Image.Type.Sliced;
         background.color = Color.white;
-        background.preserveAspect = true;
+        background.preserveAspect = false;
         background.raycastTarget = true;
+        Outline selectionOutline = iconObject.AddComponent<Outline>();
+        selectionOutline.effectColor = SelectedOutlineColor;
+        selectionOutline.effectDistance = new Vector2(2f, -2f);
+        selectionOutline.useGraphicAlpha = true;
+        selectionOutline.enabled = false;
         GameObject unitIconObject = new GameObject("UnitIcon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         unitIconObject.transform.SetParent(iconObject.transform, false);
         RectTransform unitIconRect = unitIconObject.GetComponent<RectTransform>();
         SetRect(unitIconRect, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
-            new Vector2(-8f, -8f));
+            new Vector2(-IconSize * 0.24f, -IconSize * 0.24f));
         Image unitIcon = unitIconObject.GetComponent<Image>();
         unitIcon.preserveAspect = true;
         unitIcon.raycastTarget = false;
         unitIcon.enabled = false;
+
+        GameObject progressRootObject = new GameObject("ArrivalProgressBar",
+            typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        progressRootObject.transform.SetParent(iconObject.transform, false);
+        RectTransform progressRootRect = progressRootObject.GetComponent<RectTransform>();
+        SetRect(progressRootRect, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(0.5f, 0f), new Vector2(0f, 12f), new Vector2(IconSize - 28f, 9f));
+        Image progressBackground = progressRootObject.GetComponent<Image>();
+        progressBackground.sprite = GetSolidColorSprite();
+        progressBackground.color = new Color(0.015f, 0.045f, 0.025f, 0.98f);
+        progressBackground.raycastTarget = false;
+
+        GameObject progressFillObject = new GameObject("Fill",
+            typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        progressFillObject.transform.SetParent(progressRootObject.transform, false);
+        RectTransform progressFillRect = progressFillObject.GetComponent<RectTransform>();
+        SetRect(progressFillRect, new Vector2(0f, 0f), new Vector2(0f, 1f),
+            new Vector2(0f, 0.5f), Vector2.zero, new Vector2(0f, 9f));
+        Image progressFill = progressFillObject.GetComponent<Image>();
+        progressFill.sprite = GetSolidColorSprite();
+        progressFill.color = new Color(0.22f, 0.95f, 0.36f, 1f);
+        progressFill.type = Image.Type.Simple;
+        progressFill.raycastTarget = false;
+        progressRootRect.gameObject.SetActive(false);
+
         Button button = iconObject.GetComponent<Button>();
         button.targetGraphic = background;
         button.transition = Selectable.Transition.None;
@@ -692,7 +785,12 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
         {
             Button = button,
             Background = background,
+            SelectionOutline = selectionOutline,
             Icon = unitIcon,
+            TravelTimeProgressFill = progressFill,
+            TravelTimeProgressFillRect = progressFillRect,
+            TravelTimeProgressRoot = progressRootRect,
+            TravelTimeProgressWidth = IconSize - 28f,
             NameLabel = nameLabel,
             StatusLabel = statusLabel,
             TravelTimeLabel = travelLabel
@@ -762,10 +860,63 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
             bool isSelected = isOccupied && batchId == selectedBatchId;
             bool isFollowed = isOccupied && isFollowingBatch && batchId == followedBatchId;
             slot.Button.interactable = isOccupied;
-            slot.Background.color = isFollowed ? FollowingIndicatorColor : isSelected ? AccentColor : Color.white;
+            slot.Background.color = Color.white;
+            slot.SelectionOutline.enabled = isSelected || isFollowed;
+            slot.SelectionOutline.effectColor = isFollowed ? FollowingIndicatorColor : SelectedOutlineColor;
             slot.Icon.sprite = isOccupied ? GetUnitIcon(batch.UnitType) : null;
             slot.Icon.enabled = slot.Icon.sprite != null;
             slot.Icon.color = isOccupied ? GetBatchIconColor(batchId, batch) : Color.white;
+            bool isMobilizing = isOccupied && batch.Status == LymphaticBatchGroup.BatchStatus.Mobilizing;
+            if (isMobilizing)
+            {
+                float remainingTravelTime = batchSpawner.EstimateTravelTime(batch);
+                if (!slot.WasMobilizing || slot.TrackedBatch != batch)
+                {
+                    slot.TrackedBatch = batch;
+                    slot.InitialTravelTimeEstimate = 0f;
+                    slot.RemainingTravelTimeEstimate = 0f;
+                    slot.TravelTimeProgressFillRect.sizeDelta = new Vector2(0f, 9f);
+                }
+
+                slot.WasMobilizing = true;
+                slot.TravelTimeProgressRoot.gameObject.SetActive(true);
+                if (slot.InitialTravelTimeEstimate <= MinimumProgressEstimateSeconds &&
+                    remainingTravelTime > MinimumProgressEstimateSeconds)
+                {
+                    slot.InitialTravelTimeEstimate = remainingTravelTime;
+                    slot.RemainingTravelTimeEstimate = remainingTravelTime;
+                }
+                else if (slot.InitialTravelTimeEstimate > MinimumProgressEstimateSeconds)
+                {
+                    float elapsedGameplayTime = Mathf.Max(0f, Time.deltaTime);
+                    slot.RemainingTravelTimeEstimate = Mathf.Max(0f,
+                        slot.RemainingTravelTimeEstimate - elapsedGameplayTime);
+                    if (remainingTravelTime > MinimumProgressEstimateSeconds)
+                    {
+                        slot.RemainingTravelTimeEstimate = Mathf.Min(slot.RemainingTravelTimeEstimate,
+                            remainingTravelTime);
+                    }
+
+                    float remainingRatio = Mathf.Clamp01(
+                        slot.RemainingTravelTimeEstimate / slot.InitialTravelTimeEstimate);
+                    const float MinimumVisibleProgressRatio = 0.025f;
+                    remainingRatio = Mathf.Max(MinimumVisibleProgressRatio, remainingRatio);
+                    slot.TravelTimeProgressFillRect.sizeDelta = new Vector2(
+                        slot.TravelTimeProgressWidth * remainingRatio, 9f);
+                }
+                slot.TravelTimeLabel.text = FormatTravelTime(remainingTravelTime);
+            }
+            else
+            {
+                slot.WasMobilizing = false;
+                slot.TrackedBatch = null;
+                slot.InitialTravelTimeEstimate = 0f;
+                slot.RemainingTravelTimeEstimate = 0f;
+                slot.TravelTimeProgressFillRect.sizeDelta = new Vector2(0f, 9f);
+                slot.TravelTimeProgressRoot.gameObject.SetActive(false);
+                slot.TravelTimeLabel.text = string.Empty;
+            }
+
             slot.NameLabel.enabled = false;
             slot.StatusLabel.enabled = false;
             slot.TravelTimeLabel.enabled = false;
@@ -782,9 +933,6 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
             slot.NameLabel.color = isFollowed ? FollowingIndicatorColor : MainTextColor;
             slot.StatusLabel.text = batch.Status.ToString();
             slot.StatusLabel.color = isFollowed ? FollowingIndicatorColor : GetStatusColor(batch.Status);
-            slot.TravelTimeLabel.text = batch.Status == LymphaticBatchGroup.BatchStatus.Mobilizing
-                ? FormatTravelTime(batchSpawner.EstimateTravelTime(batch))
-                : string.Empty;
         }
 
         LymphaticBatchGroup selectedBatch = batchSpawner.GetBatch(selectedBatchId);
@@ -1064,15 +1212,28 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
         RectTransform rect = buttonObject.GetComponent<RectTransform>();
         SetRect(rect, Vector2.zero, Vector2.zero, Vector2.zero,
             new Vector2(left, CommandButtonBottom), new Vector2(CommandButtonSize, CommandButtonSize));
-        Image image = buttonObject.GetComponent<Image>();
-        image.sprite = LoadIconSprite(iconResourcePath);
-        image.color = Color.white;
-        image.preserveAspect = true;
-        image.raycastTarget = true;
+
+        Image background = buttonObject.GetComponent<Image>();
+        background.sprite = GetSolidColorSprite();
+        background.color = new Color(0.025f, 0.03f, 0.035f, 1f);
+        background.raycastTarget = true;
+
         Button button = buttonObject.GetComponent<Button>();
-        button.targetGraphic = image;
+        button.targetGraphic = background;
         button.transition = Selectable.Transition.None;
-        button.colors = CreateButtonColors(Color.white, SelectedSlotColor);
+        button.colors = CreateButtonColors(background.color, SelectedSlotColor);
+
+        GameObject iconObject = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        iconObject.transform.SetParent(buttonObject.transform, false);
+        RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+        SetRect(iconRect, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero,
+            new Vector2(-14f, -14f));
+        Image iconImage = iconObject.GetComponent<Image>();
+        iconImage.sprite = LoadIconSprite(iconResourcePath);
+        iconImage.color = Color.white;
+        iconImage.preserveAspect = true;
+        iconImage.raycastTarget = false;
+
         buttonLabel = CreateText("Label", rect, label.ToUpperInvariant(), 9f, MainTextColor, TextAlignmentOptions.Center,
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
         buttonLabel.gameObject.SetActive(false);
