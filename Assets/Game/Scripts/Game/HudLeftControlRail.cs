@@ -11,6 +11,7 @@ public sealed class HudLeftControlRail : MonoBehaviour
     private const string LayerIconObjectName = "LayerSelectionIcon";
     private const string SnapshotButtonObjectName = "HumanSnapshotIconButton";
     private const string ConsoleButtonObjectName = "ConsoleLogIconButton";
+    private const string SnapshotContainerResourcePath = "UI/Human snapshot container";
     private const string SnapshotCloseButtonObjectName = "HumanSnapshotCloseButton";
     private const float SnapshotWidth = 380f;
     private const float SnapshotHeight = 534f;
@@ -41,6 +42,8 @@ public sealed class HudLeftControlRail : MonoBehaviour
     private Button closeButton;
     private Button snapshotIconButton;
     private Button consoleIconButton;
+    private Button layerSelectionButton;
+    private LayerSelectionDropdownController layerDropdownController;
     private bool panelsAvailable;
     private bool snapshotOpen;
     private bool consoleOpen;
@@ -83,23 +86,96 @@ public sealed class HudLeftControlRail : MonoBehaviour
 
         snapshotCanvasGroup = GetOrAddCanvasGroup(snapshotRect.gameObject);
         consoleCanvasGroup = GetOrAddCanvasGroup(consoleRect.gameObject);
+        Image snapshotBackground = snapshotRect.GetComponent<Image>();
+        if (snapshotBackground != null)
+        {
+            snapshotBackground.sprite = LoadIconSprite(SnapshotContainerResourcePath);
+            snapshotBackground.color = Color.white;
+            snapshotBackground.preserveAspect = false;
+            snapshotBackground.raycastTarget = false;
+            if (snapshotBackground.sprite == null)
+                Debug.LogWarning("Human snapshot container resource was not found: " + SnapshotContainerResourcePath);
+        }
+
+        Transform existingCloseButton = canvasRect.Find("HumanSnapshotCloseButton");
+        if (existingCloseButton != null)
+            Destroy(existingCloseButton.gameObject);
+
         snapshotRect.gameObject.SetActive(true);
         consoleRect.gameObject.SetActive(true);
 
         ConfigureLayerIcon();
+        layerSelectionButton = layerToggleRect.GetComponent<Button>();
+        LayerSelectionDropdownController nextLayerDropdown = layerToggleRect.GetComponent<LayerSelectionDropdownController>();
+        if (layerDropdownController != null)
+            layerDropdownController.ExpandedStateChanged -= HandleLayerDropdownExpandedStateChanged;
+        layerDropdownController = nextLayerDropdown;
+        if (layerDropdownController != null)
+            layerDropdownController.ExpandedStateChanged += HandleLayerDropdownExpandedStateChanged;
+
         snapshotIconButton = CreateIconButton(SnapshotButtonObjectName, SnapshotIconResourcePath, ToggleSnapshot);
         consoleIconButton = CreateIconButton(ConsoleButtonObjectName, ConsoleIconResourcePath, ToggleConsole);
-        closeButton = CreateCloseButton();
 
         snapshotRect.SetAsLastSibling();
-        closeButtonRect.SetAsLastSibling();
         panelsAvailable = false;
         snapshotOpen = false;
         consoleOpen = false;
         ApplyLayout(true);
         SetSnapshotVisibilityImmediately(false);
         SetConsoleVisibilityImmediately(false);
+        RefreshControlAvailability();
     }
+    private void OnDestroy()
+    {
+        if (layerDropdownController != null)
+            layerDropdownController.ExpandedStateChanged -= HandleLayerDropdownExpandedStateChanged;
+    }
+
+    private void HandleLayerDropdownExpandedStateChanged(bool isExpanded)
+    {
+        RefreshControlAvailability();
+    }
+
+    private bool IsLayerDropdownExpanded => layerDropdownController != null && layerDropdownController.IsExpanded;
+
+    private void RefreshControlAvailability()
+    {
+        if (snapshotIconButton == null || consoleIconButton == null || layerSelectionButton == null)
+            return;
+
+        bool snapshotOwnsInput = snapshotOpen || snapshotTransitioning;
+        bool consoleOwnsInput = consoleOpen || consoleTransitioning;
+        bool layerSelectorOwnsInput = IsLayerDropdownExpanded;
+        if (snapshotOwnsInput)
+        {
+            snapshotIconButton.interactable = true;
+            consoleIconButton.interactable = false;
+            layerSelectionButton.interactable = false;
+            return;
+        }
+
+        if (consoleOwnsInput)
+        {
+            snapshotIconButton.interactable = false;
+            consoleIconButton.interactable = true;
+            layerSelectionButton.interactable = false;
+            return;
+        }
+
+        if (layerSelectorOwnsInput)
+        {
+            snapshotIconButton.interactable = false;
+            consoleIconButton.interactable = false;
+            layerSelectionButton.interactable = true;
+            return;
+        }
+
+        snapshotIconButton.interactable = panelsAvailable;
+        consoleIconButton.interactable = panelsAvailable;
+        layerSelectionButton.interactable = true;
+    }
+
+
 
     /// <summary>Enables or disables panel access for the currently selected body-system layer.</summary>
     public void SetPanelsAvailable(bool isAvailable)
@@ -110,6 +186,7 @@ public sealed class HudLeftControlRail : MonoBehaviour
             BeginSnapshotTransition(false);
             BeginConsoleTransition(false);
         }
+        RefreshControlAvailability();
     }
 
     private void LateUpdate()
@@ -127,6 +204,7 @@ public sealed class HudLeftControlRail : MonoBehaviour
         UpdateSnapshotTransition();
         UpdateConsoleTransition();
         UpdateCloseButtonPosition();
+        RefreshControlAvailability();
     }
 
     private void ConfigureLayerIcon()
@@ -263,7 +341,7 @@ public sealed class HudLeftControlRail : MonoBehaviour
         float topOffset = Mathf.Clamp(bounds.height * 0.078f, 48f, 84f);
         float railTop = Mathf.Clamp(bounds.height * 0.092f, 56f, RailTopOffset);
         snapshotScale = Mathf.Min(1f, Mathf.Max(0.55f, (bounds.height - topOffset - 40f) / SnapshotHeight));
-        snapshotOpenPosition = new Vector2(leftMargin + 20f, -topOffset);
+        snapshotOpenPosition = new Vector2(leftMargin + IconButtonSize + 18f, -topOffset);
         snapshotClosedPosition = new Vector2(-(SnapshotWidth * snapshotScale + 24f), -topOffset);
 
         if (dayPanelRect != null)
@@ -296,12 +374,12 @@ public sealed class HudLeftControlRail : MonoBehaviour
 
         if (consoleRect != null)
         {
-            float consoleWidth = Mathf.Min(460f, Mathf.Max(180f, bounds.width * 0.28f));
-            float consoleHeight = Mathf.Min(440f, Mathf.Max(220f, bounds.height * 0.42f));
+            float consoleWidth = Mathf.Min(bounds.width * 0.75f, bounds.width - leftMargin * 2f);
+            float consoleHeight = Mathf.Min(bounds.height * 0.65f, bounds.height - topOffset * 2f);
             consoleRect.anchorMin = Vector2.zero;
             consoleRect.anchorMax = Vector2.zero;
             consoleRect.pivot = Vector2.zero;
-            consoleRect.anchoredPosition = new Vector2(leftMargin, Mathf.Clamp(bounds.height * 0.025f, 24f, 40f));
+            consoleRect.anchoredPosition = new Vector2(bounds.width * 0.059f, bounds.height * 0.257f);
             consoleRect.sizeDelta = new Vector2(consoleWidth, consoleHeight);
             consoleRect.localScale = Vector3.one;
         }
@@ -344,14 +422,26 @@ public sealed class HudLeftControlRail : MonoBehaviour
 
     private void ToggleSnapshot()
     {
-        if (panelsAvailable)
+        if (snapshotOpen || snapshotTransitioning)
+        {
             BeginSnapshotTransition(!snapshotOpen);
+            return;
+        }
+
+        if (panelsAvailable && !consoleOpen && !consoleTransitioning && !IsLayerDropdownExpanded)
+            BeginSnapshotTransition(true);
     }
 
     private void ToggleConsole()
     {
-        if (panelsAvailable)
+        if (consoleOpen || consoleTransitioning)
+        {
             BeginConsoleTransition(!consoleOpen);
+            return;
+        }
+
+        if (panelsAvailable && !snapshotOpen && !snapshotTransitioning && !IsLayerDropdownExpanded)
+            BeginConsoleTransition(true);
     }
 
     private void BeginSnapshotTransition(bool open)
@@ -368,13 +458,17 @@ public sealed class HudLeftControlRail : MonoBehaviour
         snapshotTransitionTargetAlpha = open ? 1f : 0f;
         snapshotTransitionElapsed = 0f;
         snapshotTransitioning = true;
+        RefreshControlAvailability();
         snapshotRect.gameObject.SetActive(true);
         snapshotCanvasGroup.interactable = false;
         snapshotCanvasGroup.blocksRaycasts = false;
-        closeButton.gameObject.SetActive(open || snapshotTransitionStartAlpha > 0f);
-        closeButtonCanvasGroup.alpha = snapshotTransitionStartAlpha;
-        closeButtonCanvasGroup.interactable = false;
-        closeButtonCanvasGroup.blocksRaycasts = false;
+        if (closeButton != null && closeButtonCanvasGroup != null)
+        {
+            closeButton.gameObject.SetActive(open || snapshotTransitionStartAlpha > 0f);
+            closeButtonCanvasGroup.alpha = snapshotTransitionStartAlpha;
+            closeButtonCanvasGroup.interactable = false;
+            closeButtonCanvasGroup.blocksRaycasts = false;
+        }
         UpdateCloseButtonPosition();
     }
 
@@ -390,6 +484,7 @@ public sealed class HudLeftControlRail : MonoBehaviour
         consoleTransitionTargetAlpha = open ? 1f : 0f;
         consoleTransitionElapsed = 0f;
         consoleTransitioning = true;
+        RefreshControlAvailability();
         consoleRect.gameObject.SetActive(true);
         consoleCanvasGroup.interactable = false;
         consoleCanvasGroup.blocksRaycasts = false;
@@ -405,17 +500,22 @@ public sealed class HudLeftControlRail : MonoBehaviour
         float easedProgress = Mathf.SmoothStep(0f, 1f, progress);
         snapshotRect.anchoredPosition = Vector2.Lerp(snapshotTransitionStartPosition, snapshotTransitionTargetPosition, easedProgress);
         snapshotCanvasGroup.alpha = Mathf.Lerp(snapshotTransitionStartAlpha, snapshotTransitionTargetAlpha, easedProgress);
-        closeButtonCanvasGroup.alpha = snapshotCanvasGroup.alpha;
+        if (closeButtonCanvasGroup != null)
+            closeButtonCanvasGroup.alpha = snapshotCanvasGroup.alpha;
         if (progress < 1f)
             return;
 
         snapshotTransitioning = false;
         snapshotCanvasGroup.interactable = snapshotOpen;
         snapshotCanvasGroup.blocksRaycasts = snapshotOpen;
-        closeButtonCanvasGroup.interactable = snapshotOpen;
-        closeButtonCanvasGroup.blocksRaycasts = snapshotOpen;
-        if (!snapshotOpen)
+        if (closeButtonCanvasGroup != null)
+        {
+            closeButtonCanvasGroup.interactable = snapshotOpen;
+            closeButtonCanvasGroup.blocksRaycasts = snapshotOpen;
+        }
+        if (!snapshotOpen && closeButton != null)
             closeButton.gameObject.SetActive(false);
+        RefreshControlAvailability();
     }
 
     private void UpdateConsoleTransition()
@@ -433,6 +533,7 @@ public sealed class HudLeftControlRail : MonoBehaviour
         consoleTransitioning = false;
         consoleCanvasGroup.interactable = consoleOpen;
         consoleCanvasGroup.blocksRaycasts = consoleOpen;
+        RefreshControlAvailability();
     }
 
     private void SetSnapshotVisibilityImmediately(bool isVisible)
@@ -443,10 +544,13 @@ public sealed class HudLeftControlRail : MonoBehaviour
         snapshotCanvasGroup.alpha = isVisible ? 1f : 0f;
         snapshotCanvasGroup.interactable = isVisible;
         snapshotCanvasGroup.blocksRaycasts = isVisible;
-        closeButton.gameObject.SetActive(isVisible);
-        closeButtonCanvasGroup.alpha = isVisible ? 1f : 0f;
-        closeButtonCanvasGroup.interactable = isVisible;
-        closeButtonCanvasGroup.blocksRaycasts = isVisible;
+        if (closeButton != null && closeButtonCanvasGroup != null)
+        {
+            closeButton.gameObject.SetActive(false);
+            closeButtonCanvasGroup.alpha = 0f;
+            closeButtonCanvasGroup.interactable = false;
+            closeButtonCanvasGroup.blocksRaycasts = false;
+        }
         UpdateCloseButtonPosition();
     }
 

@@ -1,9 +1,11 @@
+using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using Object = UnityEngine.Object;
 
 /// <summary>
 /// Builds the four explicit body-system controls and keeps the HUD layout responsive.
@@ -755,6 +757,12 @@ public sealed class LayerSelectionDropdownController : MonoBehaviour
     private bool isExpanded = false;
     private bool isTransitioning;
 
+    /// <summary>Gets whether the system layer list is currently expanded.</summary>
+    public bool IsExpanded => isExpanded;
+
+    /// <summary>Raised when the system layer list is expanded or collapsed.</summary>
+    public event Action<bool> ExpandedStateChanged;
+
     internal void Initialize(RectTransform layerRows, CanvasGroup rowsGroup, TextMeshProUGUI label, Button button)
     {
         rowsRect = layerRows;
@@ -773,6 +781,7 @@ public sealed class LayerSelectionDropdownController : MonoBehaviour
             return;
 
         isExpanded = !isExpanded;
+        ExpandedStateChanged?.Invoke(isExpanded);
         transitionStartPosition = rowsRect.anchoredPosition;
         transitionStartAlpha = rowsCanvasGroup.alpha;
         transitionTargetPosition = isExpanded ? expandedPosition : expandedPosition + Vector2.up * CollapsedSlideDistance;
