@@ -81,6 +81,7 @@ public sealed class DigestiveSystemController : MonoBehaviour
     private Button vomitButton;
     private TextMeshProUGUI eatLabel;
     private TextMeshProUGUI vomitLabel;
+    private TextMeshProUGUI vomitSleepingLabel;
     private Coroutine batchQueueRoutine;
     private DigestiveBatchRequest currentBatch;
     private float eatCooldownRemaining;
@@ -148,6 +149,7 @@ public sealed class DigestiveSystemController : MonoBehaviour
                     vomitButton.gameObject.SetActive(true);
                 CenterQteButton(vomitButton);
                 ConfigureVomitButtonIcon();
+                CreateVomitSleepingLabel();
             }
         }
 
@@ -522,6 +524,41 @@ public sealed class DigestiveSystemController : MonoBehaviour
 
         if (vomitLabel != null)
             vomitLabel.gameObject.SetActive(false);
+    }
+
+    private void CreateVomitSleepingLabel()
+    {
+        if (vomitButton == null)
+            return;
+
+        Transform existingLabel = vomitButton.transform.Find("SleepingLabel");
+        if (existingLabel != null)
+        {
+            vomitSleepingLabel = existingLabel.GetComponent<TextMeshProUGUI>();
+            return;
+        }
+
+        GameObject labelObject = new GameObject("SleepingLabel", typeof(RectTransform),
+            typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        labelObject.transform.SetParent(vomitButton.transform, false);
+
+        RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+        labelRect.anchorMin = new Vector2(0.5f, 0f);
+        labelRect.anchorMax = new Vector2(0.5f, 0f);
+        labelRect.pivot = new Vector2(0.5f, 1f);
+        labelRect.anchoredPosition = new Vector2(0f, -10f);
+        labelRect.sizeDelta = new Vector2(320f, 42f);
+
+        vomitSleepingLabel = labelObject.GetComponent<TextMeshProUGUI>();
+        vomitSleepingLabel.text = "SLEEPING";
+        vomitSleepingLabel.font = Resources.Load<TMP_FontAsset>("BankGothicMediumSDF") ?? TMP_Settings.defaultFontAsset;
+        vomitSleepingLabel.fontSize = 22f;
+        vomitSleepingLabel.fontStyle = FontStyles.Bold;
+        vomitSleepingLabel.color = new Color(0.12f, 0.92f, 0.96f, 1f);
+        vomitSleepingLabel.alignment = TextAlignmentOptions.Center;
+        vomitSleepingLabel.textWrappingMode = TextWrappingModes.NoWrap;
+        vomitSleepingLabel.raycastTarget = false;
+        labelObject.SetActive(false);
     }
 
     private static void CenterQteButton(Button button)
@@ -934,5 +971,8 @@ public sealed class DigestiveSystemController : MonoBehaviour
                     vomitCooldownRemaining > 0f ? $"Vomit ({Mathf.CeilToInt(vomitCooldownRemaining)}s)" : "Vomit";
             }
         }
+
+        if (vomitSleepingLabel != null)
+            vomitSleepingLabel.gameObject.SetActive(sleeping);
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -21,21 +22,35 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
     private const string EosinophilDisplayName = "Eosinophil";
     private const string BasophilDisplayName = "Basophil";
     private const float IconSize = 88f;
-    private const float SlotSpacingAnchor = 0.08f;
-    private const float SlotRowVerticalOffset = -24f;
     private const float NeutrophilVariantLongPressDuration = 0.5f;
     private const int NoActivePointerId = int.MinValue;
     private const float FollowZoom = 18f;
     private const string FontResourcePath = "BankGothicMediumSDF";
+    private const string HeadshotContainerResourcePath = "UI/Headshot container";
+    private const string FollowCommandIconResourcePath = "UI/Follow command icon";
+    private const string AbortCommandIconResourcePath = "UI/Abort target icon";
+    private const string DestroyCommandIconResourcePath = "UI/Destroy batches icon";
     private const string BCellIconResourcePath = "UI/B cell headshot icon";
     private const string TCellIconResourcePath = "UI/Killet t cell headshot icon";
     private const string MacrophageIconResourcePath = "UI/Macrophage Headshot icon";
     private const string NeutrophilIconResourcePath = "UI/WBC HEADSHOT ICON";
+    private const float BatchPanelWidth = 1030f;
+    private const float BatchPanelHeight = 220f;
+    private const float BatchPanelLeft = 104f;
+    private const float BatchPanelBottom = 64f;
+    private const float SlotHorizontalSpacing = 96f;
+    private const float CommandButtonSize = 48f;
+    private const float CommandButtonBottom = 112f;
     private static Sprite solidColorSprite;
+    private static Sprite headshotContainerSprite;
+    private static Sprite followCommandIconSprite;
+    private static Sprite abortCommandIconSprite;
+    private static Sprite destroyCommandIconSprite;
     private static Sprite bCellIconSprite;
     private static Sprite tCellIconSprite;
     private static Sprite macrophageIconSprite;
     private static Sprite neutrophilIconSprite;
+    private static readonly Dictionary<string, Sprite> IconSprites = new Dictionary<string, Sprite>();
 
     private static readonly Color PanelColor = new Color(0.012f, 0.035f, 0.047f, 0.96f);
     private static readonly Color AccentColor = new Color(0.12f, 0.84f, 0.91f, 1f);
@@ -186,35 +201,25 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
         GameObject panelObject = new GameObject(PanelName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(CanvasGroup));
         panelObject.transform.SetParent(parent, false);
         panelRect = panelObject.GetComponent<RectTransform>();
-        SetRect(panelRect, Vector2.zero, new Vector2(1f, 0f), Vector2.zero,
-            new Vector2(500f, 28f), new Vector2(-528f, 210f));
+        SetRect(panelRect, Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(BatchPanelLeft, BatchPanelBottom), new Vector2(BatchPanelWidth, BatchPanelHeight));
         Image panelImage = panelObject.GetComponent<Image>();
-        panelImage.color = PanelColor;
-        panelImage.raycastTarget = true;
+        panelImage.color = new Color(1f, 1f, 1f, 0f);
+        panelImage.raycastTarget = false;
         panelCanvasGroup = panelObject.GetComponent<CanvasGroup>();
         panelCanvasGroup.alpha = 0f;
         panelCanvasGroup.interactable = false;
         panelCanvasGroup.blocksRaycasts = false;
         panelObject.transform.SetAsLastSibling();
 
-        CreateAccentBar("TopAccent", panelRect, new Vector2(0f, 1f), new Vector2(1f, 1f), Vector2.zero,
-            Vector2.zero, new Vector2(0f, 3f), AccentColor);
-        CreateText("PanelTitle", panelRect, "UNIT BATCHES", 13f, MainTextColor, TextAlignmentOptions.MidlineLeft,
-            new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(14f, -8f), new Vector2(180f, 22f));
-        selectionHintLabel = CreateText("SelectionHint", panelRect, "Select a ready batch, then choose an infection.", 9f, MutedTextColor,
-            TextAlignmentOptions.MidlineRight, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
-            new Vector2(-14f, -8f), new Vector2(560f, 20f));
-        CreateAccentBar("HeaderDivider", panelRect, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -30f), new Vector2(0f, 1f), new Color(AccentColor.r, AccentColor.g, AccentColor.b, 0.42f));
-
         for (int index = 0; index < MaximumSlots; index++)
             slots[index] = CreateSlot(index);
 
-        followButton = CreateActionButton("Follow", panelRect, 14f, 86f, out followButtonLabel);
+        followButton = CreateActionButton("Follow", FollowCommandIconResourcePath, panelRect, 12f, out followButtonLabel);
         followButton.onClick.AddListener(ToggleFollow);
-        abortButton = CreateActionButton("Abort Target", panelRect, 110f, 116f, out _);
+        abortButton = CreateActionButton("Abort Target", AbortCommandIconResourcePath, panelRect, 90f, out _);
         abortButton.onClick.AddListener(AbortSelectedBatch);
-        destroyButton = CreateActionButton("Destroy Batch", panelRect, 236f, 126f, out _);
+        destroyButton = CreateActionButton("Destroy Batch", DestroyCommandIconResourcePath, panelRect, 168f, out _);
         destroyButton.onClick.AddListener(DestroySelectedBatch);
         BuildNeutrophilVariantPanel(parent);
     }
@@ -575,7 +580,33 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
             return BasophilDisplayName;
         if (string.Equals(variant, NeutrophilUnitName, StringComparison.OrdinalIgnoreCase))
             return NeutrophilUnitName;
+
         return batch.DisplayName;
+    }
+
+    private static Sprite LoadIconSprite(string resourcePath)
+    {
+        if (IconSprites.TryGetValue(resourcePath, out Sprite cachedSprite) && cachedSprite != null)
+            return cachedSprite;
+
+        Sprite sprite = Resources.Load<Sprite>(resourcePath);
+        if (sprite == null)
+        {
+            Texture2D texture = Resources.Load<Texture2D>(resourcePath);
+            if (texture != null)
+                sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
+        }
+
+        if (sprite != null)
+            IconSprites[resourcePath] = sprite;
+        return sprite;
+    }
+
+    private static Sprite GetHeadshotContainerSprite()
+    {
+        if (headshotContainerSprite == null)
+            headshotContainerSprite = LoadIconSprite(HeadshotContainerResourcePath);
+        return headshotContainerSprite;
     }
 
     private static Sprite GetUnitIcon(string unitType)
@@ -609,14 +640,16 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
 
     private BatchSlot CreateSlot(int index)
     {
-        float anchorX = 0.5f + (index - (MaximumSlots - 1) * 0.5f) * SlotSpacingAnchor;
+        float slotLeft = index * SlotHorizontalSpacing;
         GameObject iconObject = new GameObject("BatchIcon_" + (index + 1), typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
         iconObject.transform.SetParent(panelRect, false);
         RectTransform iconRect = iconObject.GetComponent<RectTransform>();
-        SetRect(iconRect, new Vector2(anchorX, 0.5f), new Vector2(anchorX, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, IconSize * 0.5f - 7f + SlotRowVerticalOffset), new Vector2(IconSize, IconSize));
+        SetRect(iconRect, Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(slotLeft, 0f), new Vector2(IconSize, IconSize));
         Image background = iconObject.GetComponent<Image>();
-        background.color = EmptySlotColor;
+        background.sprite = GetHeadshotContainerSprite();
+        background.color = Color.white;
+        background.preserveAspect = true;
         background.raycastTarget = true;
         GameObject unitIconObject = new GameObject("UnitIcon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         unitIconObject.transform.SetParent(iconObject.transform, false);
@@ -629,10 +662,8 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
         unitIcon.enabled = false;
         Button button = iconObject.GetComponent<Button>();
         button.targetGraphic = background;
-        button.transition = Selectable.Transition.ColorTint;
-        ColorBlock slotColors = CreateButtonColors(ActiveSlotColor, SelectedSlotColor);
-        slotColors.disabledColor = EmptySlotColor;
-        button.colors = slotColors;
+        button.transition = Selectable.Transition.None;
+        button.colors = CreateButtonColors(Color.white, SelectedSlotColor);
         int slotIndex = index;
         button.onClick.AddListener(() => SelectSlot(slotIndex));
         EventTrigger pointerClickTrigger = iconObject.AddComponent<EventTrigger>();
@@ -648,14 +679,14 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
             eventData => HandleBatchSlotBeginDrag(slotIndex, eventData));
 
         TextMeshProUGUI travelLabel = CreateText("TravelTime_" + (index + 1), panelRect, string.Empty, 9f, MobilizingColor,
-            TextAlignmentOptions.Center, new Vector2(anchorX, 0.5f), new Vector2(anchorX, 0.5f), new Vector2(0.5f, 0f),
-            new Vector2(0f, IconSize - 7f + SlotRowVerticalOffset), new Vector2(92f, 18f));
+            TextAlignmentOptions.Center, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0f),
+            new Vector2(slotLeft + IconSize * 0.5f, IconSize - 7f), new Vector2(92f, 18f));
         TextMeshProUGUI nameLabel = CreateText("BatchName_" + (index + 1), panelRect, string.Empty, 8f, MainTextColor,
-            TextAlignmentOptions.Center, new Vector2(anchorX, 0.5f), new Vector2(anchorX, 0.5f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -7f + SlotRowVerticalOffset), new Vector2(96f, 18f));
+            TextAlignmentOptions.Center, Vector2.zero, Vector2.zero, new Vector2(0.5f, 1f),
+            new Vector2(slotLeft + IconSize * 0.5f, -7f), new Vector2(96f, 18f));
         TextMeshProUGUI statusLabel = CreateText("BatchStatus_" + (index + 1), panelRect, string.Empty, 8f, MutedTextColor,
-            TextAlignmentOptions.Center, new Vector2(anchorX, 0.5f), new Vector2(anchorX, 0.5f), new Vector2(0.5f, 1f),
-            new Vector2(0f, -23f + SlotRowVerticalOffset), new Vector2(96f, 16f));
+            TextAlignmentOptions.Center, Vector2.zero, Vector2.zero, new Vector2(0.5f, 1f),
+            new Vector2(slotLeft + IconSize * 0.5f, -23f), new Vector2(96f, 16f));
 
         return new BatchSlot
         {
@@ -731,15 +762,13 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
             bool isSelected = isOccupied && batchId == selectedBatchId;
             bool isFollowed = isOccupied && isFollowingBatch && batchId == followedBatchId;
             slot.Button.interactable = isOccupied;
-            slot.Background.color = !isOccupied
-                ? EmptySlotColor
-                : isFollowed ? FollowingSlotColor : isSelected ? SelectedSlotColor : ActiveSlotColor;
+            slot.Background.color = isFollowed ? FollowingIndicatorColor : isSelected ? AccentColor : Color.white;
             slot.Icon.sprite = isOccupied ? GetUnitIcon(batch.UnitType) : null;
             slot.Icon.enabled = slot.Icon.sprite != null;
             slot.Icon.color = isOccupied ? GetBatchIconColor(batchId, batch) : Color.white;
-            slot.NameLabel.enabled = isOccupied;
-            slot.StatusLabel.enabled = isOccupied;
-            slot.TravelTimeLabel.enabled = isOccupied && batch.Status == LymphaticBatchGroup.BatchStatus.Mobilizing;
+            slot.NameLabel.enabled = false;
+            slot.StatusLabel.enabled = false;
+            slot.TravelTimeLabel.enabled = false;
 
             if (!isOccupied)
             {
@@ -1026,21 +1055,27 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
         return string.Format("{0:00}:{1:00}", roundedSeconds / 60, roundedSeconds % 60);
     }
 
-    private Button CreateActionButton(string label, RectTransform parent, float left, float width, out TextMeshProUGUI buttonLabel)
+    private Button CreateActionButton(string label, string iconResourcePath, RectTransform parent, float left,
+        out TextMeshProUGUI buttonLabel)
     {
-        GameObject buttonObject = new GameObject("BatchAction_" + label.Replace(" ", string.Empty), typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+        GameObject buttonObject = new GameObject("BatchAction_" + label.Replace(" ", string.Empty),
+            typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
         buttonObject.transform.SetParent(parent, false);
         RectTransform rect = buttonObject.GetComponent<RectTransform>();
-        SetRect(rect, Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(left, 8f), new Vector2(width, 30f));
+        SetRect(rect, Vector2.zero, Vector2.zero, Vector2.zero,
+            new Vector2(left, CommandButtonBottom), new Vector2(CommandButtonSize, CommandButtonSize));
         Image image = buttonObject.GetComponent<Image>();
-        image.color = ActiveSlotColor;
+        image.sprite = LoadIconSprite(iconResourcePath);
+        image.color = Color.white;
+        image.preserveAspect = true;
         image.raycastTarget = true;
         Button button = buttonObject.GetComponent<Button>();
         button.targetGraphic = image;
-        button.transition = Selectable.Transition.ColorTint;
-        button.colors = CreateButtonColors(ActiveSlotColor, SelectedSlotColor);
+        button.transition = Selectable.Transition.None;
+        button.colors = CreateButtonColors(Color.white, SelectedSlotColor);
         buttonLabel = CreateText("Label", rect, label.ToUpperInvariant(), 9f, MainTextColor, TextAlignmentOptions.Center,
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+        buttonLabel.gameObject.SetActive(false);
         return button;
     }
 

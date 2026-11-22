@@ -1036,6 +1036,23 @@ public class CameraScript : MonoBehaviour
 
     private void SetLayerHudPanelsVisible(bool isVisible)
     {
+        Canvas hudCanvas = consoleLogPanel != null ? consoleLogPanel.GetComponentInParent<Canvas>() : null;
+        if (hudCanvas == null && humanSnapshotPanel != null)
+            hudCanvas = humanSnapshotPanel.GetComponentInParent<Canvas>();
+        if (hudCanvas == null)
+        {
+            GameObject hudCanvasObject = GameObject.Find("HUDCanvas");
+            if (hudCanvasObject != null)
+                hudCanvas = hudCanvasObject.GetComponent<Canvas>();
+        }
+
+        HudLeftControlRail controlRail = hudCanvas != null ? hudCanvas.GetComponent<HudLeftControlRail>() : null;
+        if (controlRail != null)
+        {
+            controlRail.SetPanelsAvailable(isVisible);
+            return;
+        }
+
         if (consoleLogPanel != null)
             consoleLogPanel.SetActive(isVisible);
         if (humanSnapshotPanel != null)

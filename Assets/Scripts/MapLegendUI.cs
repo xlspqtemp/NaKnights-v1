@@ -5,7 +5,7 @@ using UnityEngine.UI;
 /// <summary>Builds the gameplay HUD map-legend button and categorized icon guide.</summary>
 public sealed class MapLegendUI : MonoBehaviour
 {
-    private const string MapLegendIconResourcePath = "UI/Map legend icon";
+    private const string MapLegendIconResourcePath = "UI/Map Legend no bg";
     private const string BuiltInFontName = "LegacyRuntime.ttf";
     private const float ToolbarIconGap = 8f;
     private const float PopupWidth = 1080f;
@@ -84,7 +84,7 @@ public sealed class MapLegendUI : MonoBehaviour
         Texture2D legendTexture = Resources.Load<Texture2D>(MapLegendIconResourcePath);
         if (legendTexture == null)
         {
-            Debug.LogWarning("Map legend icon was not found at Resources/" + MapLegendIconResourcePath + ".jpg");
+            Debug.LogWarning("Map legend icon was not found at Resources/" + MapLegendIconResourcePath + ".png");
             return;
         }
 

@@ -92,10 +92,10 @@ internal static class LayerSelectionHUD
         RectTransform controlsRoot = CreateLayerControls(canvas.transform, canvas.transform as RectTransform,
             out RectTransform toggleRect);
 
-        ResponsiveHudLayout responsiveLayout = canvas.GetComponent<ResponsiveHudLayout>();
-        if (responsiveLayout == null)
-            responsiveLayout = canvas.gameObject.AddComponent<ResponsiveHudLayout>();
-        responsiveLayout.Configure(snapshotPanel, controlsRoot, dayPanel, consolePanel, layerRowsRoot, toggleRect);
+        HudLeftControlRail controlRail = canvas.GetComponent<HudLeftControlRail>();
+        if (controlRail == null)
+            controlRail = canvas.gameObject.AddComponent<HudLeftControlRail>();
+        controlRail.Initialize(canvas, snapshotPanel, consolePanel, dayPanel, controlsRoot, toggleRect, layerRowsRoot);
 
         randomEventIconHistoryUI = canvas.GetComponent<RandomEventIconHistoryUI>();
         if (randomEventIconHistoryUI == null)
@@ -152,24 +152,25 @@ internal static class LayerSelectionHUD
         toggleRect.anchorMax = new Vector2(0f, 1f);
         toggleRect.pivot = new Vector2(0f, 1f);
         toggleRect.anchoredPosition = Vector2.zero;
-        toggleRect.sizeDelta = new Vector2(300f, LayerToggleHeight);
+        toggleRect.sizeDelta = new Vector2(72f, 72f);
         Image toggleBackground = toggleObject.GetComponent<Image>();
-        toggleBackground.color = SelectedButtonColor;
+        toggleBackground.color = new Color(0.01f, 0.04f, 0.05f, 0.22f);
         toggleBackground.raycastTarget = true;
         Button toggleButton = toggleObject.GetComponent<Button>();
         toggleButton.targetGraphic = toggleBackground;
         toggleButton.transition = Selectable.Transition.ColorTint;
-        toggleButton.colors = CreateButtonColors(SelectedButtonColor);
+        toggleButton.colors = CreateButtonColors(toggleBackground.color);
         CreateLabel("LayerToggleLabel", toggleRect, "Layers  −", 14f, TextAlignmentOptions.MidlineLeft);
         TextMeshProUGUI toggleLabel = toggleRect.Find("LayerToggleLabel").GetComponent<TextMeshProUGUI>();
+        toggleLabel.gameObject.SetActive(false);
 
         layerRowsRoot = CreateRectObject("LayerSelectionRows", rootRect);
-        layerRowsRoot.anchoredPosition = new Vector2(0f, -(LayerToggleHeight + LayerToggleGap));
-        layerRowsRoot.sizeDelta = new Vector2(300f, 1f);
+        layerRowsRoot.anchoredPosition = new Vector2(82f, 0f);
+        layerRowsRoot.sizeDelta = new Vector2(300f, 190f);
         CanvasGroup rowsCanvasGroup = layerRowsRoot.gameObject.AddComponent<CanvasGroup>();
-        rowsCanvasGroup.alpha = 1f;
-        rowsCanvasGroup.interactable = true;
-        rowsCanvasGroup.blocksRaycasts = true;
+        rowsCanvasGroup.alpha = 0f;
+        rowsCanvasGroup.interactable = false;
+        rowsCanvasGroup.blocksRaycasts = false;
         LayerSelectionDropdownController dropdown = toggleObject.AddComponent<LayerSelectionDropdownController>();
         dropdown.Initialize(layerRowsRoot, rowsCanvasGroup, toggleLabel, toggleButton);
 
@@ -751,7 +752,7 @@ public sealed class LayerSelectionDropdownController : MonoBehaviour
     private float transitionStartAlpha;
     private float transitionTargetAlpha;
     private float transitionElapsed;
-    private bool isExpanded = true;
+    private bool isExpanded = false;
     private bool isTransitioning;
 
     internal void Initialize(RectTransform layerRows, CanvasGroup rowsGroup, TextMeshProUGUI label, Button button)

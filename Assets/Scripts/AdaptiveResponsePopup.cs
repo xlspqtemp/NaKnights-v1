@@ -98,6 +98,10 @@ public sealed class AdaptiveResponsePopup : MonoBehaviour
     /// <summary>Queues the pathogen appearance message using its matching HUD icon.</summary>
     public void ShowPathogenAppeared(string pathogenName, InfectionPathogenType pathogenType)
     {
+        CameraScript cameraController = FindFirstObjectByType<CameraScript>();
+        if (cameraController == null || cameraController.SelectedLayer != 2)
+            return;
+
         string resolvedName = string.IsNullOrWhiteSpace(pathogenName) ? "Pathogen" : pathogenName;
         EnqueueMessage("A " + resolvedName + " has appeared!", LoadPathogenIcon(pathogenType));
     }
