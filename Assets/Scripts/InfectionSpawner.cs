@@ -31,6 +31,17 @@ public sealed class InfectionSpawner : MonoBehaviour
     private const float PathogenVisualGroundRaycastDistance = 100f;
     private const float MinimumPathogenSpawnSeparation = 1.5f;
     private const int PathogenSpawnSearchAttempts = 32;
+    private static readonly int[] NonViralPathogenWaveSizes = { 2, 3, 5 };
+    private const string PathogenWaveIndicatorObjectName = "Pathogen Wave Indicator";
+    private const string PathogenWaveIndicatorFontResourcePath = "BankGothicMediumSDF";
+    private const float PathogenWaveIndicatorCanvasScale = 0.01f;
+    private const float PathogenWaveIndicatorHeightOffset = 1.25f;
+    private const float PathogenWaveIndicatorRetrySeconds = 1f;
+    private const int PathogenWaveIndicatorSortingOrder = 25;
+    private const float PathogenWaveIndicatorCanvasWidth = 520f;
+    private const float PathogenWaveIndicatorCanvasHeight = 88f;
+    private static readonly Color PathogenWaveIndicatorBackgroundColor = new Color(0.004f, 0.012f, 0.018f, 0.96f);
+    private static readonly Color PathogenWaveIndicatorColor = new Color(0.12f, 0.84f, 0.91f, 1f);
     private const float PathogenSpawnSearchAngleStep = 2.39996323f;
     private const float MinimumPathogenVisualSpawnSeparation = 1.1f;
     private const int DefaultMaximumActiveWbcs = 5;
@@ -908,6 +919,12 @@ public sealed class InfectionSpawner : MonoBehaviour
         public bool wellnessGainAwardedOnResolve;
         public Vector3 worldPosition;
         public int vesselSpawnPointIndex;
+        public int currentWaveNumber;
+        public int currentWaveSpawnedCount;
+        public bool allWavesCleared;
+        public float nextWaveSpawnRetryTime;
+        public Canvas waveIndicatorCanvas;
+        public TextMeshProUGUI waveIndicatorLabel;
         public Sprite notificationIcon;
         public SpriteRenderer notificationRenderer;
         public readonly List<GameObject> threatVisuals = new List<GameObject>();
@@ -1086,6 +1103,7 @@ public sealed class InfectionSpawner : MonoBehaviour
         UpdateTaggedInfectionResolutions();
         UpdateInfectionMarkerAnimations();
         UpdateInfectionThreatVisuals();
+        UpdatePathogenWaveIndicators();
         UpdateSelectedInfectionPopup();
         UpdateContainmentDetailsOverlay();
         UpdateSquadPrompt();
@@ -3254,8 +3272,11 @@ public sealed class InfectionSpawner : MonoBehaviour
                 }
             }
 
-            if (!keepAliveUntilResolved && !squad.holdingForContainment)
+            if (!keepAliveUntilResolved && !squad.holdingForContainment &&
+                (squad.infectionTarget == null || !IsWaveBasedInfection(squad.infectionTarget) || squad.infectionTarget.allWavesCleared))
+            {
                 squad.lifetimeRemaining -= gameplayDeltaTime;
+            }
             foreach (GameObject unit in squad.units)
             {
                 if (unit == null || !unit.activeInHierarchy)
@@ -3288,7 +3309,8 @@ public sealed class InfectionSpawner : MonoBehaviour
                 {
                     squad.arrivalMessageLogged = true;
                     LogWbcSquadMessage($"WBC squad arrived at {squad.infectionTarget.infection.displayName}.", ConsoleLogUI.LogType.Success);
-                    if (!squad.infectionTarget.isTagged && squad.infectionTarget.infection.pathogenType != InfectionPathogenType.Allergen)
+                    if (!squad.infectionTarget.isTagged && squad.infectionTarget.infection.pathogenType != InfectionPathogenType.Allergen &&
+                        !IsWaveBasedInfection(squad.infectionTarget))
                         BeginInfectionResolution(squad.infectionTarget, null, GetWbcVoiceLines(squad.units));
 
                     if (squad.infectionTarget.isContained &&
@@ -3309,6 +3331,9 @@ public sealed class InfectionSpawner : MonoBehaviour
                 continue;
             }
 
+            if (squad.infectionTarget != null && IsWaveBasedInfection(squad.infectionTarget) &&
+                !squad.infectionTarget.allWavesCleared)
+                continue;
             if (!keepAliveUntilResolved && !squad.holdingForContainment && squad.lifetimeRemaining <= 0f)
                 DespawnWbcSquad(squadIndex);
         }
@@ -3324,7 +3349,8 @@ public sealed class InfectionSpawner : MonoBehaviour
         {
             DispatchedWbcSquad squad = dispatchedWbcSquads[squadIndex];
             InfectionMarker marker = squad.infectionTarget;
-            if (!squad.combatStarted || marker == null || marker.isRemoving || marker.isTagged)
+            if (!squad.combatStarted || marker == null || marker.isRemoving ||
+                (marker.isTagged && !IsWaveBasedInfection(marker)))
                 continue;
             bool pathogenIsVirusOrParasite = marker.infection != null &&
                 (marker.infection.pathogenType == InfectionPathogenType.Viral || marker.infection.pathogenType == InfectionPathogenType.Parasite);
@@ -3339,7 +3365,7 @@ public sealed class InfectionSpawner : MonoBehaviour
                 FadeOutAndDespawnWbcSquad(squadIndex);
                 continue;
             }
-            if (marker.threatVisuals.Count == 0)
+            if (marker.threatVisuals.Count == 0 && !IsWaveBasedInfection(marker))
                 continue;
 
             List<GameObject> livingWbcs = new List<GameObject>();
@@ -3366,6 +3392,9 @@ public sealed class InfectionSpawner : MonoBehaviour
 
             if (livingPathogens.Count == 0)
             {
+                if (TryProgressInfectionWave(marker))
+                    continue;
+
                 if (!squad.resolutionTriggered)
                 {
                     squad.resolutionTriggered = true;
@@ -3498,10 +3527,11 @@ public sealed class InfectionSpawner : MonoBehaviour
                 continue;
             }
 
-            if (marker.isTagged && !isEosinophilParasiteBatch)
+            if (marker.isTagged && !isEosinophilParasiteBatch && !IsWaveBasedInfection(marker))
                 continue;
 
-            bool usesCombatClear = marker.infection.pathogenType == InfectionPathogenType.Allergen ||
+            bool usesCombatClear = IsWaveBasedInfection(marker) ||
+                marker.infection.pathogenType == InfectionPathogenType.Allergen ||
                 isEosinophilParasiteBatch || isViralBatchTarget || isMacrophageBatch;
             if (!usesCombatClear)
                 BeginInfectionResolution(marker, batch);
@@ -3516,6 +3546,9 @@ public sealed class InfectionSpawner : MonoBehaviour
 
             if (usesCombatClear && activeBatchPathogens.Count == 0)
             {
+                if (TryProgressInfectionWave(marker))
+                    continue;
+
                 BeginInfectionResolution(marker, batch);
                 continue;
             }
@@ -3794,7 +3827,8 @@ public sealed class InfectionSpawner : MonoBehaviour
         foreach (DispatchedWbcSquad squad in dispatchedWbcSquads)
         {
             InfectionMarker marker = squad != null ? squad.infectionTarget : null;
-            if (squad != null && squad.arrivalMessageLogged && marker != null && marker.isTagged && !marker.isRemoving)
+            if (squad != null && squad.arrivalMessageLogged && marker != null && marker.isTagged && !marker.isRemoving &&
+                (!IsWaveBasedInfection(marker) || marker.allWavesCleared))
                 taggedMarkersWithResponders.Add(marker);
         }
 
@@ -3806,8 +3840,9 @@ public sealed class InfectionSpawner : MonoBehaviour
             foreach (LymphaticBatchGroup batch in activeLymphaticBatches)
             {
                 InfectionMarker marker = batch != null ? batch.TargetInfection : null;
-                if (batch == null || batch.Status != LymphaticBatchGroup.BatchStatus.Working
-                    || marker == null || !marker.isTagged || marker.isRemoving)
+            if (batch == null || batch.Status != LymphaticBatchGroup.BatchStatus.Working
+                    || marker == null || !marker.isTagged || marker.isRemoving ||
+                    (IsWaveBasedInfection(marker) && !marker.allWavesCleared))
                     continue;
 
                 bool isInnateResponder = string.Equals(batch.UnitType, "Neutrophil", StringComparison.OrdinalIgnoreCase)
@@ -3824,7 +3859,8 @@ public sealed class InfectionSpawner : MonoBehaviour
 
     private void ResolveTaggedInfectionImmediately(InfectionMarker marker)
     {
-        if (marker == null || !marker.isTagged || marker.isRemoving || marker.resolutionPending || marker.infection == null)
+        if (marker == null || !marker.isTagged || marker.isRemoving || marker.resolutionPending || marker.infection == null ||
+            (IsWaveBasedInfection(marker) && !marker.allWavesCleared))
             return;
 
         marker.resolutionPending = true;
@@ -4165,6 +4201,9 @@ public sealed class InfectionSpawner : MonoBehaviour
         bool isMatchingTutorialKillerTCell = marker.isTutorialMarker && isViral && isKillerTCell &&
             string.Equals(sourceBatch.PathogenVariant, marker.infection.displayName, StringComparison.OrdinalIgnoreCase);
         bool isEosinophilParasiteResponder = isParasite && IsEosinophilResponder(sourceBatch);
+        if (IsWaveBasedInfection(marker) && !marker.allWavesCleared &&
+            (!isParasite || isEosinophilParasiteResponder))
+            return;
         if (marker.isContained && !isEosinophilParasiteResponder && !isMatchingTutorialKillerTCell)
             return;
 
@@ -4692,6 +4731,12 @@ public sealed class InfectionSpawner : MonoBehaviour
         }
 
         DespawnDendriticCellsForInfection(marker);
+        if (marker.waveIndicatorCanvas != null)
+        {
+            Destroy(marker.waveIndicatorCanvas.gameObject);
+            marker.waveIndicatorCanvas = null;
+            marker.waveIndicatorLabel = null;
+        }
         marker.isRemoving = true;
         marker.animationElapsed = 0f;
         DespawnInfectionThreatVisuals(marker);
@@ -5281,6 +5326,7 @@ public sealed class InfectionSpawner : MonoBehaviour
             unresolvedDays = Mathf.Max(0, infection.daysUntreated),
             wasBarrierMutated = wasBarrierMutated,
             isTutorialMarker = isTutorialMarker,
+            currentWaveNumber = infection.pathogenType == InfectionPathogenType.Viral ? 0 : 1,
             notificationIcon = ResolvePathogenNotificationIcon(infection.pathogenType)
         };
 
@@ -5289,7 +5335,16 @@ public sealed class InfectionSpawner : MonoBehaviour
             CreateAdaptiveResponsePopup();
         if (adaptiveResponsePopup != null)
             adaptiveResponsePopup.ShowPathogenAppeared(infection.displayName, infection.pathogenType);
-        SpawnInfectionThreatVisuals(marker);
+        int initialPathogenCount = IsWaveBasedInfection(marker)
+            ? NonViralPathogenWaveSizes[0]
+            : threatVisualSpawnCount;
+        marker.currentWaveSpawnedCount = SpawnInfectionThreatVisuals(marker, initialPathogenCount);
+        if (IsWaveBasedInfection(marker))
+        {
+            if (marker.currentWaveSpawnedCount < initialPathogenCount)
+                marker.nextWaveSpawnRetryTime = Time.time + PathogenWaveIndicatorRetrySeconds;
+            CreatePathogenWaveIndicator(marker);
+        }
         if (bodyPartButton.button != null)
         {
             if (!markersByBodyPartButton.TryGetValue(bodyPartButton.button, out List<InfectionMarker> markers))
@@ -5306,22 +5361,196 @@ public sealed class InfectionSpawner : MonoBehaviour
         return marker;
     }
 
-    private void SpawnInfectionThreatVisuals(InfectionMarker marker)
+    private static bool IsWaveBasedInfection(InfectionMarker marker)
     {
-        if (marker == null || threatVisualSpawnCount <= 0)
+        return marker != null && marker.infection != null &&
+            marker.infection.pathogenType != InfectionPathogenType.Viral;
+    }
+
+    private static int CountLivingPathogens(InfectionMarker marker)
+    {
+        if (marker == null || marker.threatVisuals == null)
+            return 0;
+
+        int livingCount = 0;
+        foreach (GameObject pathogen in marker.threatVisuals)
+        {
+            Health health = pathogen != null ? pathogen.GetComponent<Health>() : null;
+            if (pathogen != null && pathogen.activeInHierarchy && health != null && !health.IsDead)
+                livingCount++;
+        }
+
+        return livingCount;
+    }
+
+    private bool TryProgressInfectionWave(InfectionMarker marker)
+    {
+        if (!IsWaveBasedInfection(marker) || marker.isRemoving || marker.allWavesCleared)
+            return false;
+        if (CountLivingPathogens(marker) > 0)
+            return false;
+        if (Time.time < marker.nextWaveSpawnRetryTime)
+            return true;
+
+        int currentWaveIndex = Mathf.Clamp(marker.currentWaveNumber - 1, 0, NonViralPathogenWaveSizes.Length - 1);
+        int desiredPathogenCount = NonViralPathogenWaveSizes[currentWaveIndex];
+        if (marker.currentWaveSpawnedCount < desiredPathogenCount)
+        {
+            int missingPathogenCount = desiredPathogenCount - marker.currentWaveSpawnedCount;
+            marker.currentWaveSpawnedCount += SpawnInfectionThreatVisuals(marker, missingPathogenCount);
+            if (marker.currentWaveSpawnedCount < desiredPathogenCount)
+                marker.nextWaveSpawnRetryTime = Time.time + PathogenWaveIndicatorRetrySeconds;
+
+            UpdatePathogenWaveIndicator(marker);
+            return true;
+        }
+
+        if (marker.currentWaveNumber < NonViralPathogenWaveSizes.Length)
+        {
+            marker.currentWaveNumber++;
+            marker.currentWaveSpawnedCount = SpawnInfectionThreatVisuals(
+                marker, NonViralPathogenWaveSizes[marker.currentWaveNumber - 1]);
+            marker.nextWaveSpawnRetryTime = marker.currentWaveSpawnedCount <
+                NonViralPathogenWaveSizes[marker.currentWaveNumber - 1]
+                ? Time.time + PathogenWaveIndicatorRetrySeconds
+                : 0f;
+            UpdatePathogenWaveIndicator(marker);
+            return true;
+        }
+
+        marker.allWavesCleared = true;
+        UpdatePathogenWaveIndicator(marker);
+        return false;
+    }
+
+    private void CreatePathogenWaveIndicator(InfectionMarker marker)
+    {
+        if (!IsWaveBasedInfection(marker))
             return;
+
+        GameObject canvasObject = new GameObject(
+            PathogenWaveIndicatorObjectName + " - " + marker.infection.displayName,
+            typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(Image), typeof(Outline));
+        canvasObject.transform.SetParent(transform, false);
+        marker.waveIndicatorCanvas = canvasObject.GetComponent<Canvas>();
+        marker.waveIndicatorCanvas.renderMode = RenderMode.WorldSpace;
+        marker.waveIndicatorCanvas.worldCamera = Camera.main;
+        marker.waveIndicatorCanvas.sortingOrder = PathogenWaveIndicatorSortingOrder;
+        marker.waveIndicatorCanvas.GetComponent<CanvasScaler>().dynamicPixelsPerUnit = 10f;
+        Image backgroundImage = canvasObject.GetComponent<Image>();
+        backgroundImage.color = PathogenWaveIndicatorBackgroundColor;
+        backgroundImage.raycastTarget = false;
+        Outline backgroundOutline = canvasObject.GetComponent<Outline>();
+        backgroundOutline.effectColor = PathogenWaveIndicatorColor;
+        backgroundOutline.effectDistance = new Vector2(2f, 2f);
+        backgroundOutline.useGraphicAlpha = true;
+
+        RectTransform canvasRect = canvasObject.GetComponent<RectTransform>();
+        canvasRect.sizeDelta = new Vector2(PathogenWaveIndicatorCanvasWidth, PathogenWaveIndicatorCanvasHeight);
+        canvasObject.transform.localScale = Vector3.one * PathogenWaveIndicatorCanvasScale;
+
+        GameObject textObject = new GameObject(
+            "Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        textObject.transform.SetParent(canvasObject.transform, false);
+        RectTransform textRect = textObject.GetComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+
+        marker.waveIndicatorLabel = textObject.GetComponent<TextMeshProUGUI>();
+        marker.waveIndicatorLabel.font = Resources.Load<TMP_FontAsset>(PathogenWaveIndicatorFontResourcePath)
+            ?? TMP_Settings.defaultFontAsset;
+        marker.waveIndicatorLabel.fontSize = 48f;
+        marker.waveIndicatorLabel.fontStyle = FontStyles.Bold;
+        marker.waveIndicatorLabel.alignment = TextAlignmentOptions.Center;
+        marker.waveIndicatorLabel.color = PathogenWaveIndicatorColor;
+        marker.waveIndicatorLabel.enableAutoSizing = true;
+        marker.waveIndicatorLabel.fontSizeMin = 32f;
+        marker.waveIndicatorLabel.fontSizeMax = 48f;
+        marker.waveIndicatorLabel.textWrappingMode = TextWrappingModes.NoWrap;
+        marker.waveIndicatorLabel.raycastTarget = false;
+        UpdatePathogenWaveIndicator(marker);
+    }
+
+    private void UpdatePathogenWaveIndicators()
+    {
+        foreach (InfectionMarker marker in activeInfectionMarkers)
+        {
+            if (IsWaveBasedInfection(marker) && marker.waveIndicatorCanvas != null)
+                UpdatePathogenWaveIndicator(marker);
+        }
+    }
+
+    private static void UpdatePathogenWaveIndicator(InfectionMarker marker)
+    {
+        if (marker == null || marker.waveIndicatorCanvas == null || marker.waveIndicatorLabel == null)
+            return;
+
+        int livingCount = CountLivingPathogens(marker);
+        marker.waveIndicatorLabel.text = marker.allWavesCleared
+            ? "ALL WAVES CLEARED"
+            : "WAVE " + marker.currentWaveNumber + " / " + NonViralPathogenWaveSizes.Length +
+                "  |  " + livingCount + " LEFT";
+
+        Vector3 position = marker.worldPosition;
+        float highestPoint = marker.worldPosition.y;
+        Vector3 horizontalTotal = Vector3.zero;
+        int visualCount = 0;
+        foreach (GameObject pathogen in marker.threatVisuals)
+        {
+            if (pathogen == null || !pathogen.activeInHierarchy)
+                continue;
+
+            Health health = pathogen.GetComponent<Health>();
+            if (health != null && health.IsDead)
+                continue;
+
+            Renderer pathogenRenderer = pathogen.GetComponentInChildren<Renderer>();
+            Vector3 visualPosition = pathogenRenderer != null ? pathogenRenderer.bounds.center : pathogen.transform.position;
+            horizontalTotal += new Vector3(visualPosition.x, 0f, visualPosition.z);
+            highestPoint = Mathf.Max(highestPoint, pathogenRenderer != null
+                ? pathogenRenderer.bounds.max.y
+                : pathogen.transform.position.y + 1f);
+            visualCount++;
+        }
+
+        if (visualCount > 0)
+        {
+            Vector3 horizontalCenter = horizontalTotal / visualCount;
+            position.x = horizontalCenter.x;
+            position.z = horizontalCenter.z;
+        }
+        position.y = highestPoint + PathogenWaveIndicatorHeightOffset;
+        marker.waveIndicatorCanvas.transform.position = position;
+        Camera camera = Camera.main;
+
+
+        if (camera != null)
+        {
+            Quaternion cameraFacingRotation = Quaternion.LookRotation(camera.transform.position - position, Vector3.up);
+            marker.waveIndicatorCanvas.transform.rotation = cameraFacingRotation * Quaternion.Euler(0f, 180f, 0f);
+        }
+    }
+
+
+    private int SpawnInfectionThreatVisuals(InfectionMarker marker, int spawnCount)
+    {
+        int spawnedCount = 0;
+        if (marker == null || spawnCount <= 0)
+            return spawnedCount;
 
         if (bacteriaPrefab == null)
         {
             Debug.LogWarning($"[InfectionSpawner] Bacteria prefab is missing; skipping threat visuals for {marker.infection.displayName}.", this);
-            return;
+            return spawnedCount;
         }
 
         NavMeshAgent prefabAgent = bacteriaPrefab.GetComponent<NavMeshAgent>();
         if (prefabAgent == null)
         {
             Debug.LogWarning($"[InfectionSpawner] Bacteria prefab '{bacteriaPrefab.name}' requires a NavMeshAgent; skipping threat visuals for {marker.infection.displayName}.", this);
-            return;
+            return spawnedCount;
         }
 
         NavMeshQueryFilter spawnFilter = new NavMeshQueryFilter
@@ -5330,9 +5559,9 @@ public sealed class InfectionSpawner : MonoBehaviour
             areaMask = prefabAgent.areaMask
         };
 
-        for (int index = 0; index < threatVisualSpawnCount; index++)
+        for (int index = 0; index < spawnCount; index++)
         {
-            if (!TryFindAvailablePathogenVisualPosition(marker, index, spawnFilter, out NavMeshHit spawnHit))
+            if (!TryFindAvailablePathogenVisualPosition(marker, marker.threatVisuals.Count, spawnFilter, out NavMeshHit spawnHit))
             {
                 Debug.LogWarning($"[InfectionSpawner] No unoccupied NavMesh point was available for {marker.infection.displayName} threat visual {index + 1}; skipping it rather than stacking pathogens.", this);
                 continue;
@@ -5395,7 +5624,10 @@ public sealed class InfectionSpawner : MonoBehaviour
             health.SetPathogenType(marker.infection.pathogenType);
 
             marker.threatVisuals.Add(visual);
+            spawnedCount++;
         }
+
+        return spawnedCount;
     }
 
     private bool TryFindAvailablePathogenVisualPosition(
