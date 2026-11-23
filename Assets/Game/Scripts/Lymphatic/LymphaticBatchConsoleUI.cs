@@ -231,10 +231,13 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
 
         followButton = CreateActionButton("Follow", FollowCommandIconResourcePath, panelRect, 12f, out followButtonLabel);
         followButton.onClick.AddListener(ToggleFollow);
+        AttachHoverTooltip(followButton, "Follow");
         abortButton = CreateActionButton("Abort Target", AbortCommandIconResourcePath, panelRect, 90f, out _);
         abortButton.onClick.AddListener(AbortSelectedBatch);
+        AttachHoverTooltip(abortButton, "Abort Target");
         destroyButton = CreateActionButton("Destroy Batch", DestroyCommandIconResourcePath, panelRect, 168f, out _);
         destroyButton.onClick.AddListener(DestroySelectedBatch);
+        AttachHoverTooltip(destroyButton, "Destroy Batch");
         BuildNeutrophilVariantPanel(parent);
     }
 
@@ -1238,6 +1241,17 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
             Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
         buttonLabel.gameObject.SetActive(false);
         return button;
+    }
+
+    private void AttachHoverTooltip(Button button, string label)
+    {
+        if (button == null || hudCanvas == null)
+            return;
+
+        HudHoverTooltip hoverTooltip = button.GetComponent<HudHoverTooltip>();
+        if (hoverTooltip == null)
+            hoverTooltip = button.gameObject.AddComponent<HudHoverTooltip>();
+        hoverTooltip.Initialize(hudCanvas.transform as RectTransform, button.transform as RectTransform, label);
     }
 
     private static void SetRect(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,

@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>Provides the left-side gameplay icon rail and animated snapshot/console panels.</summary>
@@ -115,6 +117,9 @@ public sealed class HudLeftControlRail : MonoBehaviour
 
         snapshotIconButton = CreateIconButton(SnapshotButtonObjectName, SnapshotIconResourcePath, ToggleSnapshot);
         consoleIconButton = CreateIconButton(ConsoleButtonObjectName, ConsoleIconResourcePath, ToggleConsole);
+        AddHoverTooltip(layerToggleRect.gameObject, "Layer Selection");
+        AddHoverTooltip(snapshotIconButton.gameObject, "Human Snapshot");
+        AddHoverTooltip(consoleIconButton.gameObject, "Console");
 
         snapshotRect.SetAsLastSibling();
         panelsAvailable = false;
@@ -286,6 +291,17 @@ public sealed class HudLeftControlRail : MonoBehaviour
         button.colors = CreateIconButtonColors();
         button.onClick.AddListener(onClick);
         return button;
+    }
+
+    private void AddHoverTooltip(GameObject targetObject, string label)
+    {
+        if (targetObject == null)
+            return;
+
+        HudHoverTooltip hoverTooltip = targetObject.GetComponent<HudHoverTooltip>();
+        if (hoverTooltip == null)
+            hoverTooltip = targetObject.AddComponent<HudHoverTooltip>();
+        hoverTooltip.Initialize(canvasRect, targetObject.transform as RectTransform, label);
     }
 
     private Button CreateCloseButton()
@@ -646,3 +662,101 @@ public sealed class HudLeftControlRail : MonoBehaviour
         };
     }
 }
+
+
+/// <summary>Displays a compact label while a HUD control is hovered.</summary>
+internal sealed class HudHoverTooltip : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+{
+    private const float TooltipWidth = 184f;
+    private const float TooltipHeight = 40f;
+    private const float TooltipGap = 10f;
+    private const float CanvasEdgePadding = 8f;
+    private static readonly Color TooltipBackgroundColor = new Color(0.012f, 0.028f, 0.038f, 0.98f);
+    private static readonly Color TooltipTextColor = new Color(0.92f, 0.96f, 0.97f, 1f);
+
+    private RectTransform canvasRect;
+    private RectTransform targetRect;
+    private RectTransform tooltipRect;
+
+    internal void Initialize(RectTransform targetCanvas, RectTransform target, string label)
+    {
+        canvasRect = targetCanvas;
+        targetRect = target;
+        if (canvasRect == null || targetRect == null)
+            return;
+
+        if (tooltipRect != null)
+            Destroy(tooltipRect.gameObject);
+
+        GameObject tooltipObject = new GameObject("HudHoverTooltip", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        tooltipObject.transform.SetParent(canvasRect, false);
+        tooltipRect = tooltipObject.GetComponent<RectTransform>();
+        tooltipRect.anchorMin = new Vector2(0.5f, 0.5f);
+        tooltipRect.anchorMax = new Vector2(0.5f, 0.5f);
+        tooltipRect.pivot = new Vector2(0f, 0.5f);
+        tooltipRect.sizeDelta = new Vector2(TooltipWidth, TooltipHeight);
+
+        Image background = tooltipObject.GetComponent<Image>();
+        background.color = TooltipBackgroundColor;
+        background.raycastTarget = false;
+
+        GameObject labelObject = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        labelObject.transform.SetParent(tooltipObject.transform, false);
+        RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+        labelRect.anchorMin = Vector2.zero;
+        labelRect.anchorMax = Vector2.one;
+        labelRect.offsetMin = new Vector2(8f, 4f);
+        labelRect.offsetMax = new Vector2(-8f, -4f);
+
+        TextMeshProUGUI text = labelObject.GetComponent<TextMeshProUGUI>();
+        text.font = TMP_Settings.defaultFontAsset;
+        text.fontSize = 13f;
+        text.color = TooltipTextColor;
+        text.alignment = TextAlignmentOptions.Center;
+        text.text = label;
+        text.raycastTarget = false;
+        tooltipObject.SetActive(false);
+    }
+
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        if (canvasRect == null || targetRect == null || tooltipRect == null)
+            return;
+
+        Rect bounds = canvasRect.rect;
+        float width = Mathf.Min(TooltipWidth, Mathf.Max(80f, bounds.width - CanvasEdgePadding * 2f));
+        Vector3[] corners = new Vector3[4];
+        targetRect.GetWorldCorners(corners);
+        Vector2 rightCenter = canvasRect.InverseTransformPoint((corners[2] + corners[3]) * 0.5f);
+        Vector2 leftCenter = canvasRect.InverseTransformPoint((corners[0] + corners[1]) * 0.5f);
+        float rightSpace = bounds.xMax - rightCenter.x;
+        float leftSpace = leftCenter.x - bounds.xMin;
+        bool placeRight = rightSpace >= width + TooltipGap || rightSpace >= leftSpace;
+
+        tooltipRect.pivot = new Vector2(placeRight ? 0f : 1f, 0.5f);
+        tooltipRect.sizeDelta = new Vector2(width, TooltipHeight);
+        float x = placeRight ? rightCenter.x + TooltipGap : leftCenter.x - TooltipGap;
+        x = placeRight
+            ? Mathf.Clamp(x, bounds.xMin + CanvasEdgePadding, bounds.xMax - width - CanvasEdgePadding)
+            : Mathf.Clamp(x, bounds.xMin + width + CanvasEdgePadding, bounds.xMax - CanvasEdgePadding);
+        float y = Mathf.Clamp(rightCenter.y,
+            bounds.yMin + TooltipHeight * 0.5f + CanvasEdgePadding,
+            bounds.yMax - TooltipHeight * 0.5f - CanvasEdgePadding);
+        tooltipRect.anchoredPosition = new Vector2(x, y);
+        tooltipRect.gameObject.SetActive(true);
+        tooltipRect.SetAsLastSibling();
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        if (tooltipRect != null)
+            tooltipRect.gameObject.SetActive(false);
+    }
+
+    private void OnDestroy()
+    {
+        if (tooltipRect != null)
+            Destroy(tooltipRect.gameObject);
+    }
+}
+
