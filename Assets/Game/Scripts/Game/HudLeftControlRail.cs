@@ -11,6 +11,7 @@ public sealed class HudLeftControlRail : MonoBehaviour
     private const string SnapshotIconResourcePath = "UI/Human snapshot icon button";
     private const string ConsoleIconResourcePath = "UI/Console icon";
     private const string LayerIconObjectName = "LayerSelectionIcon";
+    private const string QteBadgeObjectName = "ActiveQTEBadge";
     private const string SnapshotButtonObjectName = "HumanSnapshotIconButton";
     private const string ConsoleButtonObjectName = "ConsoleLogIconButton";
     private const string SnapshotContainerResourcePath = "UI/Human snapshot container";
@@ -19,6 +20,10 @@ public sealed class HudLeftControlRail : MonoBehaviour
     private const float SnapshotHeight = 534f;
     private const float IconButtonSize = 72f;
     private const float IconSize = 62f;
+    private const float QteBadgeSize = 26f;
+    private const int QteBadgeTextureSize = 64;
+    private const float QteBadgeCircleInset = 2f;
+    private const string QteBadgeFontResourcePath = "BankGothicMediumSDF";
     private const float RailTopOffset = 100f;
     private const float RailItemSpacing = 116f;
     private const float SnapshotTopOffset = 84f;
@@ -27,7 +32,9 @@ public sealed class HudLeftControlRail : MonoBehaviour
     private const float LayerRowHeight = 40f;
     private const float LayerRowGap = 6f;
     private static readonly Dictionary<string, Sprite> LoadedIconSprites = new Dictionary<string, Sprite>();
+    private static readonly Color QteBadgeColor = new Color(0.91f, 0.08f, 0.12f, 1f);
     private static Sprite closeArrowSprite;
+    private static Sprite qteBadgeSprite;
 
     private Canvas hudCanvas;
     private RectTransform canvasRect;
@@ -45,6 +52,8 @@ public sealed class HudLeftControlRail : MonoBehaviour
     private Button snapshotIconButton;
     private Button consoleIconButton;
     private Button layerSelectionButton;
+    private Image qteBadgeBackground;
+    private TextMeshProUGUI qteBadgeLabel;
     private LayerSelectionDropdownController layerDropdownController;
     private bool panelsAvailable;
     private bool snapshotOpen;
@@ -86,6 +95,9 @@ public sealed class HudLeftControlRail : MonoBehaviour
             return;
         }
 
+        QTETracker.ActiveQTECountChanged -= HandleActiveQTECountChanged;
+        QTETracker.ActiveQTECountChanged += HandleActiveQTECountChanged;
+
         snapshotCanvasGroup = GetOrAddCanvasGroup(snapshotRect.gameObject);
         consoleCanvasGroup = GetOrAddCanvasGroup(consoleRect.gameObject);
         Image snapshotBackground = snapshotRect.GetComponent<Image>();
@@ -107,6 +119,7 @@ public sealed class HudLeftControlRail : MonoBehaviour
         consoleRect.gameObject.SetActive(true);
 
         ConfigureLayerIcon();
+        CreateQteCountBadge();
         layerSelectionButton = layerToggleRect.GetComponent<Button>();
         LayerSelectionDropdownController nextLayerDropdown = layerToggleRect.GetComponent<LayerSelectionDropdownController>();
         if (layerDropdownController != null)
@@ -132,8 +145,14 @@ public sealed class HudLeftControlRail : MonoBehaviour
     }
     private void OnDestroy()
     {
+        QTETracker.ActiveQTECountChanged -= HandleActiveQTECountChanged;
         if (layerDropdownController != null)
             layerDropdownController.ExpandedStateChanged -= HandleLayerDropdownExpandedStateChanged;
+    }
+
+    private void HandleActiveQTECountChanged()
+    {
+        UpdateQteCountBadge();
     }
 
     private void HandleLayerDropdownExpandedStateChanged(bool isExpanded)
@@ -261,6 +280,98 @@ public sealed class HudLeftControlRail : MonoBehaviour
         layerRowsRect.pivot = new Vector2(0f, 1f);
         layerRowsRect.anchoredPosition = new Vector2(IconButtonSize + 10f, 0f);
         ArrangeLayerRows(Mathf.Min(RowsWidth, Mathf.Max(180f, canvasRect.rect.width - 180f)));
+    }
+
+    private void CreateQteCountBadge()
+    {
+        Transform existingBadge = layerToggleRect.Find(QteBadgeObjectName);
+        if (existingBadge != null)
+            Destroy(existingBadge.gameObject);
+
+        GameObject badgeObject = new GameObject(QteBadgeObjectName,
+            typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        badgeObject.transform.SetParent(layerToggleRect, false);
+
+        RectTransform badgeRect = badgeObject.GetComponent<RectTransform>();
+        badgeRect.anchorMin = new Vector2(1f, 1f);
+        badgeRect.anchorMax = new Vector2(1f, 1f);
+        badgeRect.pivot = new Vector2(0.5f, 0.5f);
+        badgeRect.sizeDelta = new Vector2(QteBadgeSize, QteBadgeSize);
+        badgeRect.anchoredPosition = new Vector2(-8f, -36f);
+
+        qteBadgeBackground = badgeObject.GetComponent<Image>();
+        qteBadgeBackground.sprite = GetQteBadgeSprite();
+        qteBadgeBackground.color = QteBadgeColor;
+        qteBadgeBackground.raycastTarget = false;
+
+        GameObject labelObject = new GameObject("Count", typeof(RectTransform),
+            typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        labelObject.transform.SetParent(badgeObject.transform, false);
+        RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+        labelRect.anchorMin = Vector2.zero;
+        labelRect.anchorMax = Vector2.one;
+        labelRect.offsetMin = Vector2.zero;
+        labelRect.offsetMax = Vector2.zero;
+
+        qteBadgeLabel = labelObject.GetComponent<TextMeshProUGUI>();
+        qteBadgeLabel.font = Resources.Load<TMP_FontAsset>(QteBadgeFontResourcePath);
+        if (qteBadgeLabel.font == null)
+            qteBadgeLabel.font = TMP_Settings.defaultFontAsset;
+        qteBadgeLabel.alignment = TextAlignmentOptions.Center;
+        qteBadgeLabel.fontStyle = FontStyles.Bold;
+        qteBadgeLabel.fontSize = 15f;
+        qteBadgeLabel.enableAutoSizing = true;
+        qteBadgeLabel.fontSizeMin = 10f;
+        qteBadgeLabel.fontSizeMax = 15f;
+        qteBadgeLabel.color = Color.white;
+        qteBadgeLabel.raycastTarget = false;
+
+        UpdateQteCountBadge();
+    }
+
+    private void UpdateQteCountBadge()
+    {
+        if (qteBadgeBackground == null || qteBadgeLabel == null)
+            return;
+
+        int activeQteCount = QTETracker.GetActiveQTECount();
+        qteBadgeLabel.text = activeQteCount > 99 ? "99+" : activeQteCount.ToString();
+        qteBadgeBackground.gameObject.SetActive(activeQteCount > 0);
+    }
+
+    private static Sprite GetQteBadgeSprite()
+    {
+        if (qteBadgeSprite != null)
+            return qteBadgeSprite;
+
+        Texture2D texture = new Texture2D(QteBadgeTextureSize, QteBadgeTextureSize, TextureFormat.RGBA32, false);
+        texture.name = QteBadgeObjectName + " Texture";
+        texture.filterMode = FilterMode.Bilinear;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        Color32[] pixels = new Color32[QteBadgeTextureSize * QteBadgeTextureSize];
+        float center = QteBadgeTextureSize * 0.5f;
+        float radius = center - QteBadgeCircleInset;
+        for (int y = 0; y < QteBadgeTextureSize; y++)
+        {
+            for (int x = 0; x < QteBadgeTextureSize; x++)
+            {
+                float dx = x + 0.5f - center;
+                float dy = y + 0.5f - center;
+                float distance = Mathf.Sqrt(dx * dx + dy * dy);
+                float alpha = Mathf.Clamp01(radius + 0.5f - distance);
+                byte alphaByte = (byte)Mathf.RoundToInt(alpha * 255f);
+                pixels[y * QteBadgeTextureSize + x] = new Color32(255, 255, 255, alphaByte);
+            }
+        }
+
+        texture.SetPixels32(pixels);
+        texture.Apply(false, true);
+        qteBadgeSprite = Sprite.Create(texture,
+            new Rect(0f, 0f, QteBadgeTextureSize, QteBadgeTextureSize),
+            new Vector2(0.5f, 0.5f), QteBadgeTextureSize);
+        qteBadgeSprite.name = QteBadgeObjectName + " Sprite";
+        return qteBadgeSprite;
     }
 
     private Button CreateIconButton(string objectName, string resourcePath, UnityEngine.Events.UnityAction onClick)
