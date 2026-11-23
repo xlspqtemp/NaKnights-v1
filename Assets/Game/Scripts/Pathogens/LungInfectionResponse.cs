@@ -29,6 +29,11 @@ public sealed class LungInfectionResponse : MonoBehaviour
     private const float CanvasPixelsPerUnit = 12f;
     private const float StatusFontSize = 58f;
     private const float ButtonFontSize = 48f;
+    private const string BankGothicFontResourcePath = "BankGothicMediumSDF";
+    private const string RespiratoryLayerPath = "/Layers/Respiratory/Layer- Respiratory System";
+    private const float InfectedRespiratoryTintAlpha = 0.55f;
+    private static readonly int RespiratoryBaseColorPropertyId = Shader.PropertyToID("_BaseColor");
+    private static readonly Color InfectedRespiratoryColor = new Color(0.96f, 0.1f, 0.12f, InfectedRespiratoryTintAlpha);
     private static readonly Vector2 CanvasSize = new Vector2(1100f, 430f);
     private static readonly Vector2 StatusSize = new Vector2(1020f, 170f);
     private static readonly Vector2 StatusPosition = new Vector2(0f, 90f);
@@ -36,6 +41,11 @@ public sealed class LungInfectionResponse : MonoBehaviour
     private static readonly Vector2 ButtonPosition = new Vector2(0f, -115f);
     private static readonly Vector2 ButtonLabelSize = new Vector2(570f, 105f);
     private static readonly Vector2 CenterAnchor = new Vector2(0.5f, 0.5f);
+    private static readonly List<LungInfectionResponse> ActiveResponses = new List<LungInfectionResponse>();
+    private static MaterialPropertyBlock respiratoryMaterialProperties;
+    private static MeshRenderer respiratoryLayerRenderer;
+    private static Color healthyRespiratoryColor = Color.cyan;
+    private static bool hasHealthyRespiratoryColor;
 
     [SerializeField] private GameObject tCellPrefab;
     [SerializeField] private GameObject macrophagePrefab;
@@ -61,6 +71,19 @@ public sealed class LungInfectionResponse : MonoBehaviour
     private void Awake()
     {
         CreateFloatingPrompt();
+    }
+
+    private void OnEnable()
+    {
+        if (!ActiveResponses.Contains(this))
+            ActiveResponses.Add(this);
+        RefreshSharedRespiratoryTint();
+    }
+
+    private void OnDisable()
+    {
+        ActiveResponses.Remove(this);
+        RefreshSharedRespiratoryTint();
     }
 
     private void OnDestroy()
@@ -240,6 +263,7 @@ public sealed class LungInfectionResponse : MonoBehaviour
         if (completedQte)
             ActivateOxygenBoost();
         DestroySpawnedImmuneCells();
+        RefreshSharedRespiratoryTint();
         if (floatingCanvas != null)
         {
             floatingCanvas.gameObject.SetActive(false);
@@ -265,8 +289,69 @@ public sealed class LungInfectionResponse : MonoBehaviour
         oxygenBoostHud.Activate(OxygenBoostDurationSeconds);
     }
 
+    private static void RefreshSharedRespiratoryTint()
+    {
+        if (respiratoryLayerRenderer == null)
+        {
+            GameObject respiratoryLayer = GameObject.Find(RespiratoryLayerPath);
+            if (respiratoryLayer == null)
+                return;
+
+            respiratoryLayerRenderer = respiratoryLayer.GetComponent<MeshRenderer>();
+            if (respiratoryLayerRenderer == null)
+                return;
+
+            hasHealthyRespiratoryColor = false;
+        }
+
+        if (!hasHealthyRespiratoryColor)
+        {
+            Material[] sharedMaterials = respiratoryLayerRenderer.sharedMaterials;
+            for (int index = 0; index < sharedMaterials.Length; index++)
+            {
+                Material material = sharedMaterials[index];
+                if (material != null && material.HasProperty(RespiratoryBaseColorPropertyId))
+                {
+                    healthyRespiratoryColor = material.GetColor(RespiratoryBaseColorPropertyId);
+                    hasHealthyRespiratoryColor = true;
+                    break;
+                }
+            }
+
+            if (!hasHealthyRespiratoryColor)
+                return;
+        }
+
+        float infectionSeverity = 0f;
+        foreach (LungInfectionResponse response in ActiveResponses)
+        {
+            if (response == null || response.infiltrationCount <= 0)
+                continue;
+
+            float severity = 1f;
+            if (response.responseInProgress)
+            {
+                float expectedResponseSeconds = response.infiltrationCount * SecondsPerInfiltration;
+                if (expectedResponseSeconds > 0f)
+                    severity = Mathf.Clamp01(response.remainingResponseSeconds / expectedResponseSeconds);
+            }
+
+            infectionSeverity = Mathf.Max(infectionSeverity, severity);
+        }
+
+        Color infectedColor = InfectedRespiratoryColor;
+        infectedColor.a = Mathf.Max(healthyRespiratoryColor.a, InfectedRespiratoryTintAlpha);
+        Color tint = Color.Lerp(healthyRespiratoryColor, infectedColor, infectionSeverity);
+        if (respiratoryMaterialProperties == null)
+            respiratoryMaterialProperties = new MaterialPropertyBlock();
+        respiratoryLayerRenderer.GetPropertyBlock(respiratoryMaterialProperties);
+        respiratoryMaterialProperties.SetColor(RespiratoryBaseColorPropertyId, tint);
+        respiratoryLayerRenderer.SetPropertyBlock(respiratoryMaterialProperties);
+    }
+
     private void RefreshPrompt()
     {
+        RefreshSharedRespiratoryTint();
         if (statusLabel == null || sendButtonLabel == null)
         {
             return;
@@ -327,6 +412,7 @@ public sealed class LungInfectionResponse : MonoBehaviour
         ConfigureCenteredRect(textRect, size, position);
 
         TextMeshProUGUI text = textObject.GetComponent<TextMeshProUGUI>();
+        text.font = Resources.Load<TMP_FontAsset>(BankGothicFontResourcePath) ?? TMP_Settings.defaultFontAsset;
         text.text = initialText;
         text.fontSize = fontSize;
         text.alignment = TextAlignmentOptions.Center;
