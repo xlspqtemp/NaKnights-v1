@@ -40,6 +40,7 @@ public sealed class WoundRepairPoint : MonoBehaviour
     private const float PlateletDroneSpawnScale = 0.2669f;
     private const string PlateletDronePrefabAssetPath = "Assets/Game/Prefabs/Platelet drone animated.prefab";
     private const string DefaultPlateletDroneWeavingStateName = "Base Layer.Weaving";
+    private const string BankGothicFontResourcePath = "BankGothicMediumSDF";
     private const float FibrinNetModelScale = 3f;
     private const float FibrinNetModelRotationX = 270f;
     private const float RepairProgressCanvasScale = 0.04f;
@@ -53,6 +54,8 @@ public sealed class WoundRepairPoint : MonoBehaviour
     private const float StatusFontSize = 42f;
     private const float LabelFontSize = 30f;
     private const float ButtonFontSize = 36f;
+    private const int RoundedSpriteTextureSize = 64;
+    private const float RoundedSpriteCornerRadius = 0f;
 
     private static readonly Vector2 CanvasSize = new Vector2(640f, 450f);
     private static readonly Vector2 CenterAnchor = new Vector2(0.5f, 0.5f);
@@ -66,6 +69,7 @@ public sealed class WoundRepairPoint : MonoBehaviour
     private static readonly Vector2 RepairProgressBarSize = new Vector2(220f, 18f);
     private static readonly List<WoundRepairPoint> ActivePoints = new List<WoundRepairPoint>();
     private static readonly HashSet<string> HandledEventKeys = new HashSet<string>();
+    private static Sprite roundedUiSprite;
     private static bool isListeningForEvents;
 
     /// <summary>Raised when the count of active skin breaches changes.</summary>
@@ -106,11 +110,10 @@ public sealed class WoundRepairPoint : MonoBehaviour
     private Canvas floatingCanvas;
     private TextMeshProUGUI statusLabel;
     private TextMeshProUGUI repairStatusLabel;
-    private TextMeshProUGUI infectionStatusLabel;
     private TextMeshProUGUI repairButtonLabel;
+    private Image repairBarFill;
     private Image repairProgressFill;
     private TextMeshProUGUI repairProgressLabel;
-    private Image infectionProgressFill;
     private Button repairButton;
     private Canvas repairProgressCanvas;
     [SerializeField] private GameObject fibrinNetPrefab;
@@ -413,13 +416,14 @@ public sealed class WoundRepairPoint : MonoBehaviour
         RectTransform panelRect = panelObject.GetComponent<RectTransform>();
         StretchToParent(panelRect);
         Image panelImage = panelObject.GetComponent<Image>();
+        panelImage.sprite = GetRoundedUiSprite();
+        panelImage.type = Image.Type.Sliced;
         panelImage.color = new Color(0.055f, 0.075f, 0.095f, 0.94f);
 
         statusLabel = CreateText("Status", panelRect, StatusSize, new Vector2(0f, 184f), "Access Point has been wounded!", StatusFontSize);
         statusLabel.color = new Color(1f, 0.82f, 0.68f, 1f);
         repairStatusLabel = CreateText("Repair Status", panelRect, RepairLabelSize, new Vector2(0f, 125f), "Repair Status: 0%", LabelFontSize);
-        infectionStatusLabel = CreateText("Bacterial Infection Status", panelRect, RepairLabelSize, new Vector2(0f, 24f), "Bacterial Infection: 0/100", LabelFontSize);
-        infectionProgressFill = CreateProgressBar("Bacterial Infection Bar", panelRect, new Vector2(0f, -19f), new Color(0.86f, 0.24f, 0.2f, 1f));
+        repairBarFill = CreateProgressBar("Repair Progress Bar", panelRect, new Vector2(0f, -19f), new Color(0.86f, 0.24f, 0.2f, 1f));
 
         GameObject buttonObject = CreateUiChild("Repair Button", panelRect, typeof(Image), typeof(Button));
         RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
@@ -430,6 +434,8 @@ public sealed class WoundRepairPoint : MonoBehaviour
         buttonRect.anchoredPosition = new Vector2(0f, -105f);
 
         Image buttonImage = buttonObject.GetComponent<Image>();
+        buttonImage.sprite = GetRoundedUiSprite();
+        buttonImage.type = Image.Type.Sliced;
         buttonImage.color = new Color(0.2f, 0.55f, 0.35f, 1f);
         repairButton = buttonObject.GetComponent<Button>();
         repairButton.targetGraphic = buttonImage;
@@ -463,7 +469,10 @@ public sealed class WoundRepairPoint : MonoBehaviour
         GameObject panelObject = CreateUiChild("Repair Progress Panel", canvasRect, typeof(Image));
         RectTransform panelRect = panelObject.GetComponent<RectTransform>();
         StretchToParent(panelRect);
-        panelObject.GetComponent<Image>().color = new Color(0.035f, 0.05f, 0.065f, 0.82f);
+        Image panelImage = panelObject.GetComponent<Image>();
+        panelImage.sprite = GetRoundedUiSprite();
+        panelImage.type = Image.Type.Sliced;
+        panelImage.color = new Color(0.035f, 0.05f, 0.065f, 0.82f);
 
         repairProgressLabel = CreateText("Repair Progress Label", panelRect, RepairProgressLabelSize, new Vector2(0f, 22f), "Repair: 0%", 20f);
         repairProgressFill = CreateCompactProgressBar(panelRect);
@@ -479,18 +488,24 @@ public sealed class WoundRepairPoint : MonoBehaviour
         backgroundRect.pivot = CenterAnchor;
         backgroundRect.sizeDelta = RepairProgressBarSize;
         backgroundRect.anchoredPosition = new Vector2(0f, -14f);
-        backgroundObject.GetComponent<Image>().color = new Color(0.08f, 0.12f, 0.14f, 1f);
+
+        Image backgroundImage = backgroundObject.GetComponent<Image>();
+        backgroundImage.sprite = GetRoundedUiSprite();
+        backgroundImage.type = Image.Type.Sliced;
+        backgroundImage.color = new Color(0.86f, 0.24f, 0.2f, 1f);
 
         GameObject fillObject = CreateUiChild("Repair Progress Fill", backgroundRect, typeof(Image));
         RectTransform fillRect = fillObject.GetComponent<RectTransform>();
-        StretchToParent(fillRect);
+        fillRect.anchorMin = new Vector2(0f, 0.5f);
+        fillRect.anchorMax = new Vector2(0f, 0.5f);
+        fillRect.pivot = new Vector2(0f, 0.5f);
+        fillRect.anchoredPosition = Vector2.zero;
+        fillRect.sizeDelta = new Vector2(0f, RepairProgressBarSize.y);
 
         Image fillImage = fillObject.GetComponent<Image>();
+        fillImage.sprite = GetRoundedUiSprite();
+        fillImage.type = Image.Type.Sliced;
         fillImage.color = new Color(0.24f, 0.82f, 0.43f, 1f);
-        fillImage.type = Image.Type.Filled;
-        fillImage.fillMethod = Image.FillMethod.Horizontal;
-        fillImage.fillOrigin = (int)Image.OriginHorizontal.Left;
-        fillImage.fillAmount = 0f;
         return fillImage;
     }
 
@@ -1112,19 +1127,14 @@ public sealed class WoundRepairPoint : MonoBehaviour
             repairProgressLabel.text = $"Repair: {repairProgress:0}%";
         }
 
+        if (repairBarFill != null)
+        {
+            SetProgressBarFill(repairBarFill, repairProgress / 100f);
+        }
+
         if (repairProgressFill != null)
         {
-            repairProgressFill.fillAmount = Mathf.Clamp01(repairProgress / 100f);
-        }
-
-        if (infectionStatusLabel != null)
-        {
-            infectionStatusLabel.text = $"Bacterial Infection: {infectionPoints:0}/{MaximumInfectionPoints}";
-        }
-
-        if (infectionProgressFill != null)
-        {
-            infectionProgressFill.fillAmount = Mathf.Clamp01(infectionPoints / MaximumInfectionPoints);
+            SetProgressBarFill(repairProgressFill, repairProgress / 100f);
         }
     }
 
@@ -1133,7 +1143,7 @@ public sealed class WoundRepairPoint : MonoBehaviour
         OnSkinBreachStateChanged?.Invoke(HasActiveBreaches);
     }
 
-    private static Image CreateProgressBar(string objectName, RectTransform parent, Vector2 position, Color fillColor)
+    private static Image CreateProgressBar(string objectName, RectTransform parent, Vector2 position, Color trackColor)
     {
         GameObject backgroundObject = CreateUiChild(objectName, parent, typeof(Image));
         RectTransform backgroundRect = backgroundObject.GetComponent<RectTransform>();
@@ -1142,19 +1152,75 @@ public sealed class WoundRepairPoint : MonoBehaviour
         backgroundRect.pivot = CenterAnchor;
         backgroundRect.sizeDelta = BarSize;
         backgroundRect.anchoredPosition = position;
-        backgroundObject.GetComponent<Image>().color = new Color(0.12f, 0.15f, 0.17f, 1f);
 
-        GameObject fillObject = CreateUiChild("Fill", backgroundRect, typeof(Image));
+        Image backgroundImage = backgroundObject.GetComponent<Image>();
+        backgroundImage.sprite = GetRoundedUiSprite();
+        backgroundImage.type = Image.Type.Sliced;
+        backgroundImage.color = trackColor;
+
+        GameObject fillObject = CreateUiChild("Repair Progress Fill", backgroundRect, typeof(Image));
         RectTransform fillRect = fillObject.GetComponent<RectTransform>();
-        StretchToParent(fillRect);
+        fillRect.anchorMin = new Vector2(0f, 0.5f);
+        fillRect.anchorMax = new Vector2(0f, 0.5f);
+        fillRect.pivot = new Vector2(0f, 0.5f);
+        fillRect.anchoredPosition = Vector2.zero;
+        fillRect.sizeDelta = new Vector2(0f, BarSize.y);
 
         Image fillImage = fillObject.GetComponent<Image>();
-        fillImage.color = fillColor;
-        fillImage.type = Image.Type.Filled;
-        fillImage.fillMethod = Image.FillMethod.Horizontal;
-        fillImage.fillOrigin = (int)Image.OriginHorizontal.Left;
-        fillImage.fillAmount = 0f;
+        fillImage.sprite = GetRoundedUiSprite();
+        fillImage.type = Image.Type.Sliced;
+        fillImage.color = new Color(0.24f, 0.82f, 0.43f, 1f);
         return fillImage;
+    }
+
+    private static void SetProgressBarFill(Image fillImage, float progress)
+    {
+        if (fillImage == null)
+            return;
+
+        RectTransform trackRect = fillImage.transform.parent as RectTransform;
+        if (trackRect == null)
+            return;
+
+        RectTransform fillRect = fillImage.rectTransform;
+        fillRect.sizeDelta = new Vector2(trackRect.rect.width * Mathf.Clamp01(progress), trackRect.rect.height);
+    }
+
+    private static Sprite GetRoundedUiSprite()
+    {
+        if (roundedUiSprite != null)
+            return roundedUiSprite;
+
+        Texture2D texture = new Texture2D(RoundedSpriteTextureSize, RoundedSpriteTextureSize, TextureFormat.RGBA32, false)
+        {
+            name = "RuntimeRoundedHudSpriteTexture",
+            filterMode = FilterMode.Bilinear,
+            wrapMode = TextureWrapMode.Clamp
+        };
+        Color32[] pixels = new Color32[RoundedSpriteTextureSize * RoundedSpriteTextureSize];
+        float radius = RoundedSpriteCornerRadius;
+        for (int y = 0; y < RoundedSpriteTextureSize; y++)
+        {
+            for (int x = 0; x < RoundedSpriteTextureSize; x++)
+            {
+                float pixelX = x + 0.5f;
+                float pixelY = y + 0.5f;
+                float nearestX = Mathf.Clamp(pixelX, radius, RoundedSpriteTextureSize - radius);
+                float nearestY = Mathf.Clamp(pixelY, radius, RoundedSpriteTextureSize - radius);
+                float distanceX = pixelX - nearestX;
+                float distanceY = pixelY - nearestY;
+                if (distanceX * distanceX + distanceY * distanceY <= radius * radius)
+                    pixels[y * RoundedSpriteTextureSize + x] = new Color32(255, 255, 255, 255);
+            }
+        }
+
+        texture.SetPixels32(pixels);
+        texture.Apply(false, true);
+        Vector4 border = new Vector4(radius, radius, radius, radius);
+        roundedUiSprite = Sprite.Create(texture, new Rect(0f, 0f, RoundedSpriteTextureSize, RoundedSpriteTextureSize),
+            new Vector2(0.5f, 0.5f), 1f, 0, SpriteMeshType.FullRect, border);
+        roundedUiSprite.name = "RuntimeRoundedHudSprite";
+        return roundedUiSprite;
     }
 
     private static GameObject CreateUiChild(string objectName, Transform parent, params System.Type[] componentTypes)
@@ -1184,6 +1250,7 @@ public sealed class WoundRepairPoint : MonoBehaviour
         textRect.anchoredPosition = position;
 
         TextMeshProUGUI text = textObject.GetComponent<TextMeshProUGUI>();
+        text.font = Resources.Load<TMP_FontAsset>(BankGothicFontResourcePath) ?? TMP_Settings.defaultFontAsset;
         text.text = initialText;
         text.fontSize = fontSize;
         text.alignment = TextAlignmentOptions.Center;
