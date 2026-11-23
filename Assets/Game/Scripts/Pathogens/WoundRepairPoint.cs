@@ -187,6 +187,7 @@ public sealed class WoundRepairPoint : MonoBehaviour
 
     private void OnDisable()
     {
+        WoundBreachQtePopupUI.HideFor(this);
         if (IsAccessPoint)
         {
             bool hadBreach = isBreached;
@@ -530,7 +531,10 @@ public sealed class WoundRepairPoint : MonoBehaviour
         nextContactReductionTime.Clear();
         wellnessEventKey = eventKey;
         if (triggersQte)
+        {
             QTETracker.Register(QTETracker.CirculatoryLayerIndex, eventKey);
+            WoundBreachQtePopupUI.ShowFor(this);
+        }
         LayerSelectionHUD.EndThreatGlow(eventKey);
         statusLabel.text = $"{gameObject.name} has been wounded!";
         repairButton.interactable = true;
@@ -549,6 +553,7 @@ public sealed class WoundRepairPoint : MonoBehaviour
         }
 
         isRepairing = true;
+        WoundBreachQtePopupUI.HideFor(this);
         repairAttemptElapsed = 0f;
         floatingCanvas.gameObject.SetActive(false);
         repairProgressCanvas.gameObject.SetActive(true);
@@ -571,6 +576,7 @@ public sealed class WoundRepairPoint : MonoBehaviour
 
         isRepairing = false;
         isWaitingForInfectionClear = true;
+        WoundBreachQtePopupUI.HideFor(this);
         ClearPlateletDrone();
         breachElapsed = 0f;
         repairProgress = 0f;
@@ -686,6 +692,7 @@ public sealed class WoundRepairPoint : MonoBehaviour
         if (breachTriggersQte)
         {
             QTETracker.Register(QTETracker.CirculatoryLayerIndex, wellnessEventKey);
+            WoundBreachQtePopupUI.ShowFor(this);
         }
 
         NotifySkinBreachStateChanged();
@@ -1012,6 +1019,7 @@ public sealed class WoundRepairPoint : MonoBehaviour
     }
     private void CompleteRepair()
     {
+        WoundBreachQtePopupUI.HideFor(this);
         isBreached = false;
         isRepairing = false;
         repairProgress = 100f;
