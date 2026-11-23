@@ -447,6 +447,8 @@ public sealed class InfectionSpawner : MonoBehaviour
     /// <summary>Raised when the player clicks a live infection row or map icon while assigning a batch target.</summary>
     public event Action<InfectionMarker> OnInfectionTargetClicked;
     public event Action<InfectionMarker> OnInfectionMapIconClicked;
+    /// <summary>Raised when deployment target selection is cancelled from the map.</summary>
+    public event Action OnDeploymentTargetSelectionCancelled;
 
     /// <summary>Forwards a clicked live infection marker to batch targeting and any active legacy target picker.</summary>
     public void NotifyInfectionTargetClicked(InfectionMarker marker)
@@ -1595,14 +1597,43 @@ public sealed class InfectionSpawner : MonoBehaviour
 
     private void HandleMapClick(bool antigenIconClicked)
     {
-        if (antigenIconClicked || !Input.GetMouseButtonDown(0))
+        if (antigenIconClicked || !Input.GetMouseButtonDown(0) || PointerIsOverGraphicUi())
             return;
 
-        if (!TryGetInfectionTargetAtScreenPosition(Input.mousePosition, out InfectionMarker infectionTarget))
+        if (TryGetInfectionTargetAtScreenPosition(Input.mousePosition, out InfectionMarker infectionTarget))
+        {
+            OnInfectionMapIconClicked?.Invoke(infectionTarget);
+            NotifyInfectionTargetClicked(infectionTarget);
+            return;
+        }
+
+        if (HasPendingDeploymentTargetSelection() && PointerIsOverWorldMap())
+            CancelPendingDeploymentTargetSelection();
+    }
+
+    private bool HasPendingDeploymentTargetSelection()
+    {
+        return awaitingSquadDestination || awaitingInfectionTargetSelection || awaitingBatchTargetSelection;
+    }
+
+    private void CancelPendingDeploymentTargetSelection()
+    {
+        if (!HasPendingDeploymentTargetSelection())
             return;
 
-        OnInfectionMapIconClicked?.Invoke(infectionTarget);
-        NotifyInfectionTargetClicked(infectionTarget);
+        awaitingSquadDestination = false;
+        awaitingInfectionTargetSelection = false;
+        OnDeploymentTargetSelectionCancelled?.Invoke();
+        SetBatchDeploymentTargetSelectionPrompt(false);
+        FadeOutSquadPrompt();
+        RefreshWbcSquadHud();
+    }
+
+    private bool PointerIsOverWorldMap()
+    {
+        if (gameplayCamera == null)
+            gameplayCamera = cameraScript != null ? cameraScript.GetComponentInChildren<Camera>() : Camera.main;
+        return gameplayCamera != null && gameplayCamera.pixelRect.Contains(Input.mousePosition);
     }
 
     private bool TryGetInfectionTargetAtScreenPosition(Vector2 screenPosition, out InfectionMarker infectionTarget)
@@ -1656,6 +1687,26 @@ public sealed class InfectionSpawner : MonoBehaviour
 
                 candidate = candidate.parent;
             }
+        }
+
+        return false;
+    }
+
+    private bool PointerIsOverGraphicUi()
+    {
+        if (EventSystem.current == null)
+            return false;
+
+        PointerEventData pointerData = new PointerEventData(EventSystem.current)
+        {
+            position = Input.mousePosition
+        };
+        List<RaycastResult> raycastResults = new List<RaycastResult>();
+        EventSystem.current.RaycastAll(pointerData, raycastResults);
+        foreach (RaycastResult result in raycastResults)
+        {
+            if (result.module is GraphicRaycaster)
+                return true;
         }
 
         return false;
@@ -1864,8 +1915,15 @@ public sealed class InfectionSpawner : MonoBehaviour
 
     private void SpawnWbcSquad()
     {
-        if (!enableWbcDispatch || idleSquad != null || headshotCooldownRemaining > 0f)
+        if (!enableWbcDispatch || headshotCooldownRemaining > 0f)
             return;
+
+        if (idleSquad != null)
+        {
+            if (!HasPendingDeploymentTargetSelection())
+                BeginIdleSquadTargetSelection();
+            return;
+        }
 
         int maxActiveSquads = Mathf.Max(1, DifficultySettings.CurrentStats.maxActiveSquads);
         int activeSquadCount = CountActiveSquads();
@@ -1951,23 +2009,31 @@ public sealed class InfectionSpawner : MonoBehaviour
         }
         else
         {
-            if (!useLegacySelectFirst && selectedMarker != null)
-            {
-                if (selectedMarker.dispatchButton != null)
-                    selectedMarker.dispatchButton.gameObject.SetActive(false);
-                selectedMarker = null;
-            }
-
-            awaitingSquadDestination = true;
-            awaitingInfectionTargetSelection = !useLegacySelectFirst;
-            if (promptBannerLabel != null)
-                promptBannerLabel.text = awaitingInfectionTargetSelection
-                    ? InfectionDeploymentPromptText
-                    : "Select a destination on the map or an infection to send your WBC squad.";
-            ShowSquadPrompt();
+            BeginIdleSquadTargetSelection();
         }
 
         RefreshWbcSquadHud();
+    }
+
+    private void BeginIdleSquadTargetSelection()
+    {
+        if (idleSquad == null)
+            return;
+
+        if (!useLegacySelectFirst && selectedMarker != null)
+        {
+            if (selectedMarker.dispatchButton != null)
+                selectedMarker.dispatchButton.gameObject.SetActive(false);
+            selectedMarker = null;
+        }
+
+        awaitingSquadDestination = true;
+        awaitingInfectionTargetSelection = !useLegacySelectFirst;
+        if (promptBannerLabel != null)
+            promptBannerLabel.text = awaitingInfectionTargetSelection
+                ? InfectionDeploymentPromptText
+                : "Select a destination on the map or an infection to send your WBC squad.";
+        ShowSquadPrompt();
     }
 
     private static bool IsValidWbcClearTarget(InfectionMarker marker, LymphaticBatchGroup sourceBatch,
@@ -3149,14 +3215,11 @@ public sealed class InfectionSpawner : MonoBehaviour
 
     private void HandleSquadPromptCancellation()
     {
-        if (!awaitingSquadDestination)
+        if (!HasPendingDeploymentTargetSelection())
             return;
 
         if (Input.GetKeyDown(KeyCode.Escape))
-        {
-            awaitingSquadDestination = false;
-            FadeOutSquadPrompt();
-        }
+            CancelPendingDeploymentTargetSelection();
     }
 
     private void UpdateIdleAndDispatchedSquads()
@@ -4493,7 +4556,11 @@ public sealed class InfectionSpawner : MonoBehaviour
                 : Color.white;
 
         if (headshotButton != null)
-            headshotButton.interactable = enableWbcDispatch && idleSquad == null && headshotCooldownRemaining <= 0f;
+        {
+            bool canStartWbcDeployment = (idleSquad == null && !awaitingBatchTargetSelection) ||
+                (idleSquad != null && !HasPendingDeploymentTargetSelection());
+            headshotButton.interactable = enableWbcDispatch && canStartWbcDeployment && headshotCooldownRemaining <= 0f;
+        }
 
         if (headshotCooldownFill != null)
         {

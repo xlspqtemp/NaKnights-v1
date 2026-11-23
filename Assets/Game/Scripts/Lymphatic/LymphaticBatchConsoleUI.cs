@@ -183,7 +183,10 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
     {
         ResetSlotPressStates(true);
         if (infectionSpawner != null)
+        {
             infectionSpawner.OnInfectionTargetClicked -= HandleInfectionTargetClicked;
+            infectionSpawner.OnDeploymentTargetSelectionCancelled -= HandleDeploymentTargetSelectionCancelled;
+        }
         if (isFollowingBatch && cameraScript != null)
             cameraScript.ClearFollowTarget();
         isFollowingBatch = false;
@@ -835,6 +838,8 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
             return;
         infectionSpawner.OnInfectionTargetClicked -= HandleInfectionTargetClicked;
         infectionSpawner.OnInfectionTargetClicked += HandleInfectionTargetClicked;
+        infectionSpawner.OnDeploymentTargetSelectionCancelled -= HandleDeploymentTargetSelectionCancelled;
+        infectionSpawner.OnDeploymentTargetSelectionCancelled += HandleDeploymentTargetSelectionCancelled;
     }
 
     private void RefreshSlots()
@@ -1121,6 +1126,21 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
         }
         RefreshSlots();
     }
+
+    private void HandleDeploymentTargetSelectionCancelled()
+    {
+        if (!awaitingTargetSelection)
+            return;
+
+        awaitingTargetSelection = false;
+        selectedBatchId = -1;
+        selectedNeutrophilVariantIndex = -1;
+        selectedNeutrophilVariantName = null;
+        if (neutrophilVariantPanelRoot != null)
+            neutrophilVariantPanelRoot.SetActive(false);
+        RefreshSlots();
+    }
+
 
     private void ToggleFollow()
     {
