@@ -79,7 +79,7 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
 
     private RectTransform consoleRect;
     private CanvasGroup consoleCanvasGroup;
-    private TextMeshProUGUI batchCountLabel;
+    private TextMeshProUGUI trainingPromptLabel;
     private LymphaticBatchSpawner batchSpawner;
     private GameObject modalRoot;
     private RectTransform modalPanelRect;
@@ -125,7 +125,7 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
 
     private void Update()
     {
-        RefreshBatchCountLabel();
+        RefreshTrainingPromptLabel();
         float deltaTime = GameplaySpeed.DeltaTime;
         if (deltaTime <= 0f)
             return;
@@ -183,8 +183,8 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
     {
         GameObject consoleObject = CreateUiObject(ConsoleRootName, hudCanvas, true);
         consoleRect = consoleObject.GetComponent<RectTransform>();
-        SetRect(consoleRect, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 0f),
-            new Vector2(500f, 28f), new Vector2(-528f, ConsoleHeight));
+        SetRect(consoleRect, new Vector2(0.05f, 0f), new Vector2(0.95f, 0f), new Vector2(0.5f, 0f),
+            new Vector2(0f, 20f), new Vector2(0f, ConsoleHeight));
 
         Image consoleBackground = consoleObject.GetComponent<Image>();
         consoleBackground.color = ConsoleBackgroundColor;
@@ -196,9 +196,9 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
 
         CreateAccentBar("TopAccent", consoleRect, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
             Vector2.zero, new Vector2(0f, 3f), AccentColor);
-        batchCountLabel = CreateText("BatchCount", consoleRect, "BATCHES 0/10", 12f, AccentColor,
-            TextAlignmentOptions.MidlineLeft, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-            new Vector2(22f, -13f), new Vector2(150f, 24f));
+        trainingPromptLabel = CreateText("TrainingPrompt", consoleRect, "click a unit to train!", 24f, AccentColor,
+            TextAlignmentOptions.Center, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -18f), new Vector2(600f, 42f));
 
         for (int index = 0; index < trainingSlots.Length; index++)
             BuildTrainingSlot(consoleRect, trainingSlots[index], index);
@@ -305,14 +305,12 @@ public sealed class LymphaticTrainingConsoleUI : MonoBehaviour
         return true;
     }
 
-    private void RefreshBatchCountLabel()
+    private void RefreshTrainingPromptLabel()
     {
-        if (batchCountLabel == null)
+        if (trainingPromptLabel == null)
             return;
 
-        int currentCount = batchSpawner != null ? batchSpawner.CurrentBatchCount : 0;
-        int maximumCount = batchSpawner != null ? batchSpawner.MaximumBatches : 10;
-        batchCountLabel.text = "BATCHES " + currentCount + "/" + maximumCount;
+        trainingPromptLabel.text = "click a unit to train!";
     }
 
     private void UpdateTrainingVisuals(TrainingSlot slot)

@@ -42,6 +42,7 @@ public sealed class KillerTCellCombatStats : MonoBehaviour
             return;
 
         attackCooldownRemaining = Mathf.Max(DefaultAttackIntervalSeconds, attackIntervalSeconds);
+        UnitAttackImpactEffect.TriggerAttackAnimationAndPlayEffect(gameObject, target);
         targetHealth.TakeDamage(attackDamage);
         Debug.Log($"Killer T-cell {name} hit {target.name} for {attackDamage:0.##} damage; remaining HP={targetHealth.CurrentHp:0.##}.", this);
     }

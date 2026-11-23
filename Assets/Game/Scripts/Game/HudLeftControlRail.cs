@@ -14,7 +14,7 @@ public sealed class HudLeftControlRail : MonoBehaviour
     private const string QteBadgeObjectName = "ActiveQTEBadge";
     private const string SnapshotButtonObjectName = "HumanSnapshotIconButton";
     private const string ConsoleButtonObjectName = "ConsoleLogIconButton";
-    private const string SnapshotContainerResourcePath = "UI/Human snapshot container";
+    private const string SnapshotContainerResourcePath = "UI/Human snapshot container fixed";
     private const string SnapshotCloseButtonObjectName = "HumanSnapshotCloseButton";
     private const float SnapshotWidth = 380f;
     private const float SnapshotHeight = 534f;
@@ -27,6 +27,7 @@ public sealed class HudLeftControlRail : MonoBehaviour
     private const float RailTopOffset = 100f;
     private const float RailItemSpacing = 116f;
     private const float SnapshotTopOffset = 84f;
+    private const float SnapshotLeftOffset = 52f;
     private const float PanelTransitionDuration = 0.28f;
     private const float RowsWidth = 300f;
     private const float LayerRowHeight = 40f;
@@ -468,7 +469,7 @@ public sealed class HudLeftControlRail : MonoBehaviour
         float topOffset = Mathf.Clamp(bounds.height * 0.078f, 48f, 84f);
         float railTop = Mathf.Clamp(bounds.height * 0.092f, 56f, RailTopOffset);
         snapshotScale = Mathf.Min(1f, Mathf.Max(0.55f, (bounds.height - topOffset - 40f) / SnapshotHeight));
-        snapshotOpenPosition = new Vector2(leftMargin + IconButtonSize + 18f, -topOffset);
+        snapshotOpenPosition = new Vector2(leftMargin + SnapshotLeftOffset, -topOffset);
         snapshotClosedPosition = new Vector2(-(SnapshotWidth * snapshotScale + 24f), -topOffset);
 
         if (dayPanelRect != null)

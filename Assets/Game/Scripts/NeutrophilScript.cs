@@ -180,6 +180,7 @@ public class NeutrophilScript : MonoBehaviour
         if (animator != null)
         {
             animator.SetTrigger(AttackParameter);
+            UnitAttackImpactEffect.PlayForTriggeredAttack(gameObject, bacteria.gameObject);
         }
 
         bacteria.gameObject.SendMessageUpwards(

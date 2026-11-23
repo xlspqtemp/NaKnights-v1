@@ -3407,7 +3407,10 @@ public sealed class InfectionSpawner : MonoBehaviour
                         if (macrophage != null)
                             TriggerMacrophageCombatAnimation(macrophage, nearestPathogen);
                         else
+                        {
                             TriggerUnitAttackAnimation(wbc);
+                            UnitAttackImpactEffect.PlayForTriggeredAttack(wbc, nearestPathogen);
+                        }
                     }
                 }
                 else
@@ -3617,7 +3620,10 @@ public sealed class InfectionSpawner : MonoBehaviour
                     if (macrophage != null)
                         TriggerMacrophageCombatAnimation(macrophage, nearestPathogen);
                     else
+                    {
                         TriggerUnitAttackAnimation(member);
+                        UnitAttackImpactEffect.PlayForTriggeredAttack(member, nearestPathogen);
+                    }
                 }
             }
         }
@@ -4118,6 +4124,9 @@ public sealed class InfectionSpawner : MonoBehaviour
             macrophage.TriggerTauntAnimation();
         else
             macrophage.TriggerAttackAnimation();
+
+        if (pathogenHealth == null || !pathogenHealth.IsDead)
+            UnitAttackImpactEffect.PlayForTriggeredAttack(macrophage.gameObject, pathogen);
     }
 
     private void FadeOutAndDespawnWbcSquad(int squadIndex)
