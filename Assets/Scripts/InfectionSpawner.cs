@@ -922,6 +922,7 @@ public sealed class InfectionSpawner : MonoBehaviour
         public int currentWaveNumber;
         public int currentWaveSpawnedCount;
         public bool allWavesCleared;
+        public bool waveIndicatorUnlocked;
         public float nextWaveSpawnRetryTime;
         public Canvas waveIndicatorCanvas;
         public TextMeshProUGUI waveIndicatorLabel;
@@ -3433,6 +3434,7 @@ public sealed class InfectionSpawner : MonoBehaviour
                     MacrophageScript macrophage = wbc.GetComponent<MacrophageScript>();
                     if (TryApplyCombatHit(wbc, nearestPathogen, wbcHealth, stats.wbcAttack * multiplier, stats.attackIntervalSeconds))
                     {
+                        marker.waveIndicatorUnlocked = true;
                         if (macrophage != null)
                             TriggerMacrophageCombatAnimation(macrophage, nearestPathogen);
                         else
@@ -3650,6 +3652,7 @@ public sealed class InfectionSpawner : MonoBehaviour
 
                 if (TryApplyCombatHit(member, nearestPathogen, memberHealth, attackDamage, stats.attackIntervalSeconds))
                 {
+                    marker.waveIndicatorUnlocked = true;
                     if (macrophage != null)
                         TriggerMacrophageCombatAnimation(macrophage, nearestPathogen);
                     else
@@ -5487,6 +5490,7 @@ public sealed class InfectionSpawner : MonoBehaviour
         if (marker == null || marker.waveIndicatorCanvas == null || marker.waveIndicatorLabel == null)
             return;
 
+        marker.waveIndicatorCanvas.enabled = marker.waveIndicatorUnlocked;
         int livingCount = CountLivingPathogens(marker);
         marker.waveIndicatorLabel.text = marker.allWavesCleared
             ? "ALL WAVES CLEARED"
