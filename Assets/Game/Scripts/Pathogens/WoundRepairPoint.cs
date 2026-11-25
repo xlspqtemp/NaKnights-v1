@@ -127,6 +127,7 @@ public sealed class WoundRepairPoint : MonoBehaviour
     private readonly List<GameObject> plateletDroneInstances = new List<GameObject>();
     private readonly List<float> plateletDroneOrbitHeights = new List<float>();
     private float plateletDroneOrbitElapsed;
+    private int plateletDroneOrbitCount;
     private Material[] fibrinNetMaterials;
     private Coroutine fibrinNetCleanupRoutine;
     private Coroutine infectionClearRoutine;
@@ -722,7 +723,8 @@ public sealed class WoundRepairPoint : MonoBehaviour
         }
 
         plateletDroneOrbitElapsed = 0f;
-        for (int droneIndex = 0; droneIndex < PlateletDroneSwarmSize; droneIndex++)
+        plateletDroneOrbitCount = Mathf.Min(PlateletDroneSwarmSize, GraphicsQualityEffects.GetRepairDroneCount());
+        for (int droneIndex = 0; droneIndex < plateletDroneOrbitCount; droneIndex++)
         {
             float orbitAngle = GetPlateletDroneOrbitStartAngle(droneIndex);
             Vector3 radialOffset = GetPlateletDroneOrbitOffset(orbitAngle);
@@ -738,9 +740,9 @@ public sealed class WoundRepairPoint : MonoBehaviour
         }
     }
 
-    private static float GetPlateletDroneOrbitStartAngle(int droneIndex)
+    private float GetPlateletDroneOrbitStartAngle(int droneIndex)
     {
-        return FullCircleRadians * droneIndex / PlateletDroneSwarmSize;
+        return FullCircleRadians * droneIndex / Mathf.Max(1, plateletDroneOrbitCount);
     }
 
     private Vector3 GetPlateletDroneOrbitOffset(float orbitAngle)
@@ -870,6 +872,7 @@ public sealed class WoundRepairPoint : MonoBehaviour
         plateletDroneInstances.Clear();
         plateletDroneOrbitHeights.Clear();
         plateletDroneOrbitElapsed = 0f;
+        plateletDroneOrbitCount = 0;
     }
 
     private void SpawnFibrinNet()
@@ -939,6 +942,7 @@ public sealed class WoundRepairPoint : MonoBehaviour
             fibrinNetInstance.transform.rotation);
         fibrinNetCenterEffectInstance.name = FibrinNetCenterEffectObjectName;
         fibrinNetCenterEffectInstance.transform.localScale = Vector3.one * FibrinNetCenterEffectScale;
+        GraphicsQualityEffects.ApplyTo(fibrinNetCenterEffectInstance);
     }
 
     private static void ConfigureTransparentMaterial(Material material)

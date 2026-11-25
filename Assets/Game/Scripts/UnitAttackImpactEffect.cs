@@ -99,6 +99,7 @@ public sealed class UnitAttackImpactEffect : MonoBehaviour
                 float effectScale = Mathf.Clamp(unitHeight * EffectScalePerUnitHeight,
                     MinimumEffectScale, MaximumEffectScale);
                 effect.transform.localScale = Vector3.one * effectScale;
+                GraphicsQualityEffects.ApplyTo(effect);
                 Destroy(effect, EffectCleanupDelaySeconds);
                 yield break;
             }

@@ -1,17 +1,22 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.Audio;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
 
-/// <summary>Provides persistent master-volume settings from either the main menu or pause menu.</summary>
+/// <summary>Creates persistent sound and graphics settings tabs for the main menu and pause menu.</summary>
 public class MasterAudioSettingsController : MonoBehaviour
 {
     private const string MasterVolumePreferenceKey = "MasterVolume";
+    private const string GraphicsQualityPreferenceKey = "GraphicsQuality";
+    private const string BankGothicFontResourcePath = "BankGothicMediumSDF";
     private const string MasterVolumeParameterName = "MasterVolume";
     private const float DefaultMasterVolume = 1f;
+    private const int DefaultGraphicsQuality = 1;
     private const float MinimumMasterDecibels = -80f;
-    private const float VolumeRowAnchorY = 0.68f;
-    private const float VoiceLineVolumeRowAnchorY = 0.39f;
+    private const float VolumeRowAnchorY = 0.56f;
+    private const float VoiceLineVolumeRowAnchorY = 0.31f;
     private const float VolumeSliderWidth = 360f;
     private const float VolumeSliderHorizontalOffset = -68f;
     private const float VolumeControlsVerticalOffset = -24f;
@@ -21,6 +26,26 @@ public class MasterAudioSettingsController : MonoBehaviour
     private const float SoundLabelHeight = 24f;
     private const float VolumePercentageWidth = 120f;
     private const float VolumePercentageHorizontalOffset = 180f;
+
+    private const int LowQualityIndex = 0;
+    private const int NormalQualityIndex = 1;
+    private const int MediumQualityIndex = 2;
+    private const int HighQualityIndex = 3;
+
+    private static readonly string[] GraphicsQualityNames = { "LOW", "NORMAL", "MEDIUM", "HIGH" };
+    private static readonly string[] GraphicsQualityDescriptions =
+    {
+        "Performance focused",
+        "Balanced settings",
+        "Sharper image and shadows",
+        "Best available visuals"
+    };
+    private static readonly float[] GraphicsRenderScales = { 0.75f, 0.85f, 0.95f, 1f };
+    private static readonly float[] GraphicsShadowDistances = { 20f, 30f, 40f, 50f };
+    private static readonly int[] GraphicsShadowCascades = { 1, 1, 2, 4 };
+    private static readonly int[] GraphicsShadowResolutions = { 512, 1024, 2048, 4096 };
+    private static readonly int[] GraphicsMsaaSamples = { 1, 1, 2, 4 };
+    private static readonly float[] GraphicsLodBiases = { 0.75f, 1f, 1.5f, 2f };
 
     private static readonly Color OverlayColor = new Color(0.005f, 0.015f, 0.025f, 0.88f);
     private static readonly Color PanelColor = new Color(0.02f, 0.055f, 0.075f, 0.99f);
@@ -39,12 +64,19 @@ public class MasterAudioSettingsController : MonoBehaviour
     private Canvas targetCanvas;
     private AudioMixerGroup masterAudioGroup;
     private GameObject settingsPanel;
+    private GameObject soundsTabPanel;
+    private GameObject graphicsTabPanel;
     private Slider masterVolumeSlider;
     private Slider voiceLineVolumeSlider;
     private TextMeshProUGUI percentageLabel;
     private TextMeshProUGUI voiceLinePercentageLabel;
+    private Button soundsTabButton;
+    private Button graphicsTabButton;
+    private TMP_FontAsset settingsFont;
+    private readonly Button[] graphicsQualityButtons = new Button[4];
     private bool returnToPauseMenu;
     private bool masterParameterAvailable;
+    private int selectedGraphicsQuality = DefaultGraphicsQuality;
 
     private void Awake()
     {
@@ -59,15 +91,25 @@ public class MasterAudioSettingsController : MonoBehaviour
         CreateSettingsPanel();
 
         float savedVolume = Mathf.Clamp01(PlayerPrefs.GetFloat(MasterVolumePreferenceKey, DefaultMasterVolume));
-        masterVolumeSlider.SetValueWithoutNotify(savedVolume);
+        if (masterVolumeSlider != null)
+            masterVolumeSlider.SetValueWithoutNotify(savedVolume);
         UpdatePercentageLabel(percentageLabel, savedVolume);
         ApplyMasterVolume(savedVolume, false);
 
         float savedVoiceLineVolume = VoiceLineAudioPlayer.GetVolume();
-        voiceLineVolumeSlider.SetValueWithoutNotify(savedVoiceLineVolume);
+        if (voiceLineVolumeSlider != null)
+            voiceLineVolumeSlider.SetValueWithoutNotify(savedVoiceLineVolume);
         UpdatePercentageLabel(voiceLinePercentageLabel, savedVoiceLineVolume);
         ApplyVoiceLineVolume(savedVoiceLineVolume);
-        settingsPanel.SetActive(false);
+
+        selectedGraphicsQuality = Mathf.Clamp(
+            PlayerPrefs.GetInt(GraphicsQualityPreferenceKey, DefaultGraphicsQuality),
+            LowQualityIndex,
+            HighQualityIndex);
+        ApplyGraphicsQuality(selectedGraphicsQuality, false);
+
+        if (settingsPanel != null)
+            settingsPanel.SetActive(false);
     }
 
     /// <summary>Opens settings over the main menu.</summary>
@@ -97,6 +139,30 @@ public class MasterAudioSettingsController : MonoBehaviour
             pauseMenuPanel.SetActive(true);
     }
 
+    /// <summary>Displays the sound settings tab.</summary>
+    public void ShowSoundsTab()
+    {
+        SetActiveTab(true);
+    }
+
+    /// <summary>Displays the graphics settings tab.</summary>
+    public void ShowGraphicsTab()
+    {
+        SetActiveTab(false);
+    }
+
+    /// <summary>Applies and saves one of the four graphics quality profiles.</summary>
+    public void SelectLowGraphicsQuality() => SelectGraphicsQuality(LowQualityIndex);
+
+    /// <summary>Applies and saves one of the four graphics quality profiles.</summary>
+    public void SelectNormalGraphicsQuality() => SelectGraphicsQuality(NormalQualityIndex);
+
+    /// <summary>Applies and saves one of the four graphics quality profiles.</summary>
+    public void SelectMediumGraphicsQuality() => SelectGraphicsQuality(MediumQualityIndex);
+
+    /// <summary>Applies and saves one of the four graphics quality profiles.</summary>
+    public void SelectHighGraphicsQuality() => SelectGraphicsQuality(HighQualityIndex);
+
     private void ShowSettingsPanel()
     {
         if (settingsPanel == null)
@@ -105,6 +171,31 @@ public class MasterAudioSettingsController : MonoBehaviour
         settingsPanel.SetActive(true);
         settingsPanel.transform.SetAsLastSibling();
         RouteUnassignedAudioSources();
+    }
+
+    private void SetActiveTab(bool showSounds)
+    {
+        if (soundsTabPanel != null)
+            soundsTabPanel.SetActive(showSounds);
+        if (graphicsTabPanel != null)
+            graphicsTabPanel.SetActive(!showSounds);
+
+        SetTabButtonSelected(soundsTabButton, showSounds);
+        SetTabButtonSelected(graphicsTabButton, !showSounds);
+    }
+
+    private static void SetTabButtonSelected(Button button, bool isSelected)
+    {
+        if (button == null)
+            return;
+
+        button.transition = Selectable.Transition.None;
+        if (button.targetGraphic != null)
+            button.targetGraphic.color = isSelected ? AccentColor : ButtonColor;
+
+        TextMeshProUGUI label = button.GetComponentInChildren<TextMeshProUGUI>();
+        if (label != null)
+            label.color = isSelected ? PanelColor : TextColor;
     }
 
     private void InitializeMixerRouting()
@@ -176,6 +267,63 @@ public class MasterAudioSettingsController : MonoBehaviour
         ApplyVoiceLineVolume(value);
     }
 
+    private void SelectGraphicsQuality(int qualityIndex)
+    {
+        selectedGraphicsQuality = Mathf.Clamp(qualityIndex, LowQualityIndex, HighQualityIndex);
+        ApplyGraphicsQuality(selectedGraphicsQuality, true);
+    }
+
+    private void ApplyGraphicsQuality(int qualityIndex, bool savePreference)
+    {
+        int clampedIndex = Mathf.Clamp(qualityIndex, LowQualityIndex, HighQualityIndex);
+        UniversalRenderPipelineAsset pipeline = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+
+        QualitySettings.lodBias = GraphicsLodBiases[clampedIndex];
+        QualitySettings.shadowDistance = GraphicsShadowDistances[clampedIndex];
+        QualitySettings.antiAliasing = GraphicsMsaaSamples[clampedIndex] > 1
+            ? GraphicsMsaaSamples[clampedIndex]
+            : 0;
+
+        if (pipeline != null)
+        {
+            pipeline.renderScale = GraphicsRenderScales[clampedIndex];
+            pipeline.shadowDistance = GraphicsShadowDistances[clampedIndex];
+            pipeline.shadowCascadeCount = GraphicsShadowCascades[clampedIndex];
+            pipeline.mainLightShadowmapResolution = GraphicsShadowResolutions[clampedIndex];
+            pipeline.additionalLightsShadowmapResolution = GraphicsShadowResolutions[clampedIndex];
+            pipeline.msaaSampleCount = GraphicsMsaaSamples[clampedIndex];
+        }
+        else
+        {
+            Debug.LogWarning("[Graphics Settings] Active render pipeline is not URP; URP profile settings could not be applied.");
+        }
+
+        UpdateGraphicsQualityButtonVisuals();
+        if (savePreference)
+        {
+            PlayerPrefs.SetInt(GraphicsQualityPreferenceKey, clampedIndex);
+            PlayerPrefs.Save();
+        }
+    }
+
+    private void UpdateGraphicsQualityButtonVisuals()
+    {
+        for (int index = 0; index < graphicsQualityButtons.Length; index++)
+        {
+            Button button = graphicsQualityButtons[index];
+            if (button == null)
+                continue;
+
+            button.transition = Selectable.Transition.None;
+            if (button.targetGraphic != null)
+                button.targetGraphic.color = index == selectedGraphicsQuality ? AccentColor : ButtonColor;
+
+            TextMeshProUGUI label = button.GetComponentInChildren<TextMeshProUGUI>();
+            if (label != null)
+                label.color = index == selectedGraphicsQuality ? PanelColor : TextColor;
+        }
+    }
+
     private static void UpdatePercentageLabel(TextMeshProUGUI label, float normalizedVolume)
     {
         if (label != null)
@@ -186,11 +334,15 @@ public class MasterAudioSettingsController : MonoBehaviour
     {
         if (targetCanvas == null)
         {
-            Debug.LogWarning("[Audio Settings] No Canvas was found; settings UI cannot be created.");
+            Debug.LogWarning("[Settings] No Canvas was found; settings UI cannot be created.");
             return;
         }
 
-        settingsPanel = new GameObject("MasterAudioSettingsPanel", typeof(RectTransform), typeof(Image));
+        settingsFont = Resources.Load<TMP_FontAsset>(BankGothicFontResourcePath);
+        if (settingsFont == null)
+            settingsFont = TMP_Settings.defaultFontAsset;
+
+        settingsPanel = new GameObject("SettingsPanel", typeof(RectTransform), typeof(Image));
         settingsPanel.transform.SetParent(targetCanvas.transform, false);
         settingsPanel.transform.SetAsLastSibling();
         RectTransform overlayRect = settingsPanel.GetComponent<RectTransform>();
@@ -201,25 +353,66 @@ public class MasterAudioSettingsController : MonoBehaviour
 
         GameObject card = CreateImageObject(settingsPanel.transform, "SettingsCard", PanelColor,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            Vector2.zero, new Vector2(620f, 430f), true);
+            Vector2.zero, new Vector2(680f, 500f), true);
         CreateText(card.transform, "SettingsTitle", "SETTINGS", 34, FontStyles.Bold,
-            new Vector2(0.5f, 1f), new Vector2(0f, -64f), new Vector2(520f, 54f), TextAlignmentOptions.Center);
+            new Vector2(0.5f, 1f), new Vector2(0f, -50f), new Vector2(520f, 54f), TextAlignmentOptions.Center);
 
-        percentageLabel = CreateVolumePercentageLabel(card.transform, "MasterVolumePercentage", VolumeRowAnchorY);
-        masterVolumeSlider = CreateVolumeSlider(card.transform, "MasterVolumeSlider", VolumeRowAnchorY,
+        soundsTabButton = CreateButton(card.transform, "SoundsTabButton", "SOUNDS", new Vector2(0.5f, 1f),
+            new Vector2(-124f, -112f), new Vector2(220f, 48f), ShowSoundsTab);
+        graphicsTabButton = CreateButton(card.transform, "GraphicsTabButton", "GRAPHICS", new Vector2(0.5f, 1f),
+            new Vector2(124f, -112f), new Vector2(220f, 48f), ShowGraphicsTab);
+
+        soundsTabPanel = new GameObject("SoundsTab", typeof(RectTransform));
+        soundsTabPanel.transform.SetParent(card.transform, false);
+        SetRect(soundsTabPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one,
+            new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+
+        percentageLabel = CreateVolumePercentageLabel(soundsTabPanel.transform, "MasterVolumePercentage", VolumeRowAnchorY);
+        masterVolumeSlider = CreateVolumeSlider(soundsTabPanel.transform, "MasterVolumeSlider", VolumeRowAnchorY,
             HandleMasterVolumeChanged);
-        CreateVolumeLabel(card.transform, "MasterVolumeLabel", "MASTER VOLUME", VolumeRowAnchorY);
+        CreateVolumeLabel(soundsTabPanel.transform, "MasterVolumeLabel", "MASTER VOLUME", VolumeRowAnchorY);
 
-        voiceLinePercentageLabel = CreateVolumePercentageLabel(card.transform,
+        voiceLinePercentageLabel = CreateVolumePercentageLabel(soundsTabPanel.transform,
             "VoiceLineVolumePercentage", VoiceLineVolumeRowAnchorY);
-        voiceLineVolumeSlider = CreateVolumeSlider(card.transform, "VoiceLineVolumeSlider",
+        voiceLineVolumeSlider = CreateVolumeSlider(soundsTabPanel.transform, "VoiceLineVolumeSlider",
             VoiceLineVolumeRowAnchorY, HandleVoiceLineVolumeChanged);
-        CreateVolumeLabel(card.transform, "VoiceLineVolumeLabel", "VOICE LINES", VoiceLineVolumeRowAnchorY);
+        CreateVolumeLabel(soundsTabPanel.transform, "VoiceLineVolumeLabel", "VOICE LINES", VoiceLineVolumeRowAnchorY);
+
+        graphicsTabPanel = new GameObject("GraphicsTab", typeof(RectTransform));
+        graphicsTabPanel.transform.SetParent(card.transform, false);
+        SetRect(graphicsTabPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one,
+            new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+
+        CreateGraphicsQualityButton(graphicsTabPanel.transform, LowQualityIndex, new Vector2(-126f, 18f));
+        CreateGraphicsQualityButton(graphicsTabPanel.transform, NormalQualityIndex, new Vector2(126f, 18f));
+        CreateGraphicsQualityButton(graphicsTabPanel.transform, MediumQualityIndex, new Vector2(-126f, -96f));
+        CreateGraphicsQualityButton(graphicsTabPanel.transform, HighQualityIndex, new Vector2(126f, -96f));
+        CreateText(graphicsTabPanel.transform, "GraphicsQualityDescription",
+            "Applied now and saved for your next run.", 14, FontStyles.Normal,
+            new Vector2(0.5f, 0.5f), new Vector2(0f, -151f), new Vector2(560f, 28f), TextAlignmentOptions.Center);
 
         CreateButton(card.transform, "SettingsBackButton", "BACK", new Vector2(0.5f, 0f),
-            new Vector2(0f, 58f), new Vector2(200f, 52f), CloseSettings);
+            new Vector2(0f, 12f), new Vector2(200f, 52f), CloseSettings);
 
+        SetActiveTab(true);
+        UpdateGraphicsQualityButtonVisuals();
         settingsPanel.SetActive(false);
+    }
+
+    private void CreateGraphicsQualityButton(Transform parent, int qualityIndex, Vector2 anchoredPosition)
+    {
+        string buttonLabel = $"{GraphicsQualityNames[qualityIndex]}\n{GraphicsQualityDescriptions[qualityIndex]}";
+        Button button = CreateButton(parent, $"GraphicsQuality{GraphicsQualityNames[qualityIndex]}Button", buttonLabel,
+            new Vector2(0.5f, 0.5f), anchoredPosition, new Vector2(228f, 82f),
+            () => SelectGraphicsQuality(qualityIndex));
+        graphicsQualityButtons[qualityIndex] = button;
+
+        TextMeshProUGUI label = button.GetComponentInChildren<TextMeshProUGUI>();
+        if (label != null)
+        {
+            label.fontSize = 16;
+            label.textWrappingMode = TextWrappingModes.Normal;
+        }
     }
 
     private TextMeshProUGUI CreateVolumePercentageLabel(Transform parent, string objectName, float rowAnchorY)
@@ -277,7 +470,7 @@ public class MasterAudioSettingsController : MonoBehaviour
         return slider;
     }
 
-    private void CreateButton(Transform parent, string objectName, string label, Vector2 anchor,
+    private Button CreateButton(Transform parent, string objectName, string label, Vector2 anchor,
         Vector2 anchoredPosition, Vector2 size, UnityEngine.Events.UnityAction onClick)
     {
         GameObject buttonObject = new GameObject(objectName, typeof(RectTransform), typeof(Image), typeof(Button), typeof(AudioSource));
@@ -314,6 +507,7 @@ public class MasterAudioSettingsController : MonoBehaviour
         audioSource.spatialBlend = 0f;
         ButtonSFX buttonSfx = buttonObject.AddComponent<ButtonSFX>();
         buttonSfx.ConfigureFeedback(buttonClickClip, buttonHoverClip, masterAudioGroup);
+        return button;
     }
 
     private static GameObject CreateImageObject(Transform parent, string objectName, Color color,
@@ -350,7 +544,7 @@ public class MasterAudioSettingsController : MonoBehaviour
         return rect;
     }
 
-    private static TextMeshProUGUI CreateText(Transform parent, string objectName, string content, int fontSize,
+    private TextMeshProUGUI CreateText(Transform parent, string objectName, string content, int fontSize,
         FontStyles fontStyle, Vector2 anchor, Vector2 anchoredPosition, Vector2 sizeDelta, TextAlignmentOptions alignment)
     {
         GameObject textObject = new GameObject(objectName, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
@@ -359,7 +553,7 @@ public class MasterAudioSettingsController : MonoBehaviour
         SetRect(rect, anchor, anchor, anchor, anchoredPosition, sizeDelta);
 
         TextMeshProUGUI text = textObject.GetComponent<TextMeshProUGUI>();
-        text.font = TMP_Settings.defaultFontAsset;
+        text.font = settingsFont != null ? settingsFont : TMP_Settings.defaultFontAsset;
         text.text = content;
         text.fontSize = fontSize;
         text.fontStyle = fontStyle;
