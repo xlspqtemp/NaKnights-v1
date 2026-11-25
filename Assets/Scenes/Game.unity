@@ -1999,6 +1999,7 @@ MonoBehaviour:
   panelScale: 0.04
   useCameraBillboard: 1
   fibrinNetPrefab: {fileID: 1237335485931434276, guid: 48cd0daaad55d1f4880b8708fed71581, type: 3}
+  fibrinNetCenterEffectPrefab: {fileID: 155548, guid: d50f5f5d5a171443fa76bc1f6fc90473, type: 3}
   plateletDronePrefab: {fileID: 4903755377927486783, guid: b3ebb1054f4e91c46a1a111594d18a4a, type: 3}
   plateletDroneWeavingStateName: Base Layer.Weaving
 --- !u!1 &92909452
@@ -12083,6 +12084,7 @@ MonoBehaviour:
   panelScale: 0.04
   useCameraBillboard: 1
   fibrinNetPrefab: {fileID: 1237335485931434276, guid: 48cd0daaad55d1f4880b8708fed71581, type: 3}
+  fibrinNetCenterEffectPrefab: {fileID: 155548, guid: d50f5f5d5a171443fa76bc1f6fc90473, type: 3}
   plateletDronePrefab: {fileID: 4903755377927486783, guid: b3ebb1054f4e91c46a1a111594d18a4a, type: 3}
   plateletDroneWeavingStateName: Base Layer.Weaving
 --- !u!1 &1060831431
@@ -12190,6 +12192,7 @@ MonoBehaviour:
   panelScale: 0.04
   useCameraBillboard: 1
   fibrinNetPrefab: {fileID: 1237335485931434276, guid: 48cd0daaad55d1f4880b8708fed71581, type: 3}
+  fibrinNetCenterEffectPrefab: {fileID: 155548, guid: d50f5f5d5a171443fa76bc1f6fc90473, type: 3}
   plateletDronePrefab: {fileID: 4903755377927486783, guid: b3ebb1054f4e91c46a1a111594d18a4a, type: 3}
   plateletDroneWeavingStateName: Base Layer.Weaving
 --- !u!1 &1083217998
@@ -14055,6 +14058,7 @@ MonoBehaviour:
   panelScale: 0.04
   useCameraBillboard: 1
   fibrinNetPrefab: {fileID: 1237335485931434276, guid: 48cd0daaad55d1f4880b8708fed71581, type: 3}
+  fibrinNetCenterEffectPrefab: {fileID: 155548, guid: d50f5f5d5a171443fa76bc1f6fc90473, type: 3}
   plateletDronePrefab: {fileID: 4903755377927486783, guid: b3ebb1054f4e91c46a1a111594d18a4a, type: 3}
   plateletDroneWeavingStateName: Base Layer.Weaving
 --- !u!1 &1163054868
@@ -16591,6 +16595,7 @@ MonoBehaviour:
   panelScale: 0.04
   useCameraBillboard: 1
   fibrinNetPrefab: {fileID: 1237335485931434276, guid: 48cd0daaad55d1f4880b8708fed71581, type: 3}
+  fibrinNetCenterEffectPrefab: {fileID: 155548, guid: d50f5f5d5a171443fa76bc1f6fc90473, type: 3}
   plateletDronePrefab: {fileID: 4903755377927486783, guid: b3ebb1054f4e91c46a1a111594d18a4a, type: 3}
   plateletDroneWeavingStateName: Base Layer.Weaving
 --- !u!1 &1422195804
@@ -23417,6 +23422,7 @@ MonoBehaviour:
   panelScale: 0.04
   useCameraBillboard: 1
   fibrinNetPrefab: {fileID: 1237335485931434276, guid: 48cd0daaad55d1f4880b8708fed71581, type: 3}
+  fibrinNetCenterEffectPrefab: {fileID: 155548, guid: d50f5f5d5a171443fa76bc1f6fc90473, type: 3}
   plateletDronePrefab: {fileID: 4903755377927486783, guid: b3ebb1054f4e91c46a1a111594d18a4a, type: 3}
   plateletDroneWeavingStateName: Base Layer.Weaving
 --- !u!1001 &2766709378708606963

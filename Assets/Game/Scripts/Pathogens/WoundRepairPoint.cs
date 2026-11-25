@@ -42,6 +42,8 @@ public sealed class WoundRepairPoint : MonoBehaviour
     private const string DefaultPlateletDroneWeavingStateName = "Base Layer.Weaving";
     private const string BankGothicFontResourcePath = "BankGothicMediumSDF";
     private const float FibrinNetModelScale = 3f;
+    private const float FibrinNetCenterEffectScale = 0.18f;
+    private const string FibrinNetCenterEffectObjectName = "Fibrin Net Center Effect";
     private const float FibrinNetModelRotationX = 270f;
     private const float RepairProgressCanvasScale = 0.04f;
     private const float FloatingHeight = 3f;
@@ -117,9 +119,11 @@ public sealed class WoundRepairPoint : MonoBehaviour
     private Button repairButton;
     private Canvas repairProgressCanvas;
     [SerializeField] private GameObject fibrinNetPrefab;
+    [SerializeField] private GameObject fibrinNetCenterEffectPrefab;
     [SerializeField] private GameObject plateletDronePrefab;
     [SerializeField] private string plateletDroneWeavingStateName = DefaultPlateletDroneWeavingStateName;
     private GameObject fibrinNetInstance;
+    private GameObject fibrinNetCenterEffectInstance;
     private readonly List<GameObject> plateletDroneInstances = new List<GameObject>();
     private readonly List<float> plateletDroneOrbitHeights = new List<float>();
     private float plateletDroneOrbitElapsed;
@@ -919,6 +923,22 @@ public sealed class WoundRepairPoint : MonoBehaviour
 
         fibrinNetMaterials = materials.ToArray();
         UpdateFibrinNetAlpha(FibrinNetInitialAlpha);
+        SpawnFibrinNetCenterEffect();
+    }
+
+    private void SpawnFibrinNetCenterEffect()
+    {
+        if (fibrinNetCenterEffectPrefab == null || fibrinNetInstance == null)
+        {
+            return;
+        }
+
+        fibrinNetCenterEffectInstance = Instantiate(
+            fibrinNetCenterEffectPrefab,
+            fibrinNetInstance.transform.position,
+            fibrinNetInstance.transform.rotation);
+        fibrinNetCenterEffectInstance.name = FibrinNetCenterEffectObjectName;
+        fibrinNetCenterEffectInstance.transform.localScale = Vector3.one * FibrinNetCenterEffectScale;
     }
 
     private static void ConfigureTransparentMaterial(Material material)
@@ -1009,6 +1029,12 @@ public sealed class WoundRepairPoint : MonoBehaviour
             }
 
             fibrinNetMaterials = null;
+        }
+
+        if (fibrinNetCenterEffectInstance != null)
+        {
+            Destroy(fibrinNetCenterEffectInstance);
+            fibrinNetCenterEffectInstance = null;
         }
 
         if (fibrinNetInstance != null)

@@ -18,9 +18,9 @@ public sealed class InfectionNotificationManager : MonoBehaviour
     private const int MaximumNotifications = 5;
     private const float DeploymentTargetPulseSpeed = 2.8f;
     private const float DeploymentTargetPulseScale = 0.06f;
-    private const float DeploymentHoverGlowScale = 1.18f;
+    private const float DeploymentHoverGlowScale = 1.3f;
     private const int GeneratedSpritePixelsPerUnit = 1024;
-    private static readonly Color DeploymentHoverGlowColor = new Color(0.2f, 0.9f, 1f, 0.72f);
+    private static readonly Color DeploymentHoverGlowColor = new Color(0.08f, 1f, 1f, 0.96f);
     private const float CategoryContainerFontSize = 30f;
     private static readonly Color MutatedColor = new Color(0.72f, 0.12f, 1f, 1f);
 
