@@ -17,8 +17,10 @@ public sealed class InfectionNotificationManager : MonoBehaviour
     private const string CategoryLabelObjectName = "CategoryLabel";
     private const int MaximumNotifications = 5;
     private const float DeploymentTargetPulseSpeed = 2.8f;
-    private const float DeploymentTargetPulseScale = 0.16f;
+    private const float DeploymentTargetPulseScale = 0.06f;
+    private const float DeploymentHoverGlowScale = 1.18f;
     private const int GeneratedSpritePixelsPerUnit = 1024;
+    private static readonly Color DeploymentHoverGlowColor = new Color(0.2f, 0.9f, 1f, 0.72f);
     private const float CategoryContainerFontSize = 30f;
     private static readonly Color MutatedColor = new Color(0.72f, 0.12f, 1f, 1f);
 
@@ -52,6 +54,7 @@ public sealed class InfectionNotificationManager : MonoBehaviour
         public InfectionSpawner.InfectionMarker marker;
         public GameObject gameObject;
         public SpriteRenderer spriteRenderer;
+        public SpriteRenderer hoverGlowRenderer;
         public BoxCollider boxCollider;
         public Canvas categoryCanvas;
         public Image categoryBackground;
@@ -61,6 +64,7 @@ public sealed class InfectionNotificationManager : MonoBehaviour
         public float bobTime;
         public bool fadingOut;
         public bool desired;
+        public bool isHovered;
     }
 
     private readonly Dictionary<InfectionSpawner.InfectionMarker, NotificationState> notifications =
@@ -128,6 +132,7 @@ public sealed class InfectionNotificationManager : MonoBehaviour
             return;
 
         SyncNotifications();
+        UpdateHoveredNotification();
         if (IsCirculatoryLayerActive())
             HandlePickerClick();
     }
@@ -294,6 +299,16 @@ public sealed class InfectionNotificationManager : MonoBehaviour
         marker.notificationRenderer = spriteRenderer;
         AssignNotificationSprite(spriteRenderer, marker);
 
+        GameObject hoverGlowObject = new GameObject("Deployment Hover Glow");
+        hoverGlowObject.transform.SetParent(notificationObject.transform, false);
+        SpriteRenderer hoverGlowRenderer = hoverGlowObject.AddComponent<SpriteRenderer>();
+        hoverGlowRenderer.sprite = spriteRenderer.sprite;
+        hoverGlowRenderer.color = DeploymentHoverGlowColor;
+        hoverGlowRenderer.sortingLayerID = spriteRenderer.sortingLayerID;
+        hoverGlowRenderer.sortingOrder = spriteRenderer.sortingOrder - 1;
+        hoverGlowObject.transform.localScale = Vector3.one * DeploymentHoverGlowScale;
+        hoverGlowRenderer.enabled = false;
+
         BoxCollider boxCollider = notificationObject.GetComponent<BoxCollider>();
         if (boxCollider == null)
             boxCollider = notificationObject.AddComponent<BoxCollider>();
@@ -317,6 +332,7 @@ public sealed class InfectionNotificationManager : MonoBehaviour
             marker = marker,
             gameObject = notificationObject,
             spriteRenderer = spriteRenderer,
+            hoverGlowRenderer = hoverGlowRenderer,
             boxCollider = boxCollider,
             categoryCanvas = categoryCanvas,
             categoryBackground = categoryBackground,
@@ -487,6 +503,50 @@ public sealed class InfectionNotificationManager : MonoBehaviour
 
         float distance = Vector3.Distance(cameraTransform.position, anchor);
         return Mathf.Max(0.01f, distance * iconScale * 0.35f);
+    }
+
+    private void UpdateHoveredNotification()
+    {
+        bool deploymentSelectionActive = infectionSpawner != null &&
+            infectionSpawner.IsAwaitingDeploymentTargetSelection &&
+            gameplayCamera != null && IsCirculatoryLayerActive();
+        NotificationState hoveredNotification = null;
+        float nearestDistance = float.PositiveInfinity;
+
+        if (deploymentSelectionActive)
+        {
+            Ray ray = gameplayCamera.ScreenPointToRay(Input.mousePosition);
+            RaycastHit[] hits = Physics.RaycastAll(ray, Mathf.Infinity, Physics.DefaultRaycastLayers,
+                QueryTriggerInteraction.Ignore);
+            foreach (RaycastHit hit in hits)
+            {
+                foreach (NotificationState state in notifications.Values)
+                {
+                    if (!state.desired || state.fadingOut || state.boxCollider == null ||
+                        !state.boxCollider.enabled || hit.collider != state.boxCollider)
+                        continue;
+
+                    if (hit.distance < nearestDistance)
+                    {
+                        hoveredNotification = state;
+                        nearestDistance = hit.distance;
+                    }
+                }
+            }
+        }
+
+        foreach (NotificationState state in notifications.Values)
+        {
+            state.isHovered = state == hoveredNotification;
+            if (state.hoverGlowRenderer == null)
+                continue;
+
+            bool showGlow = state.isHovered && state.alpha > 0f;
+            state.hoverGlowRenderer.enabled = showGlow;
+            Color glowColor = DeploymentHoverGlowColor;
+            glowColor.a *= state.alpha;
+            state.hoverGlowRenderer.color = glowColor;
+        }
     }
 
     private void HandlePickerClick()
