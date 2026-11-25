@@ -16,6 +16,8 @@ public sealed class InfectionNotificationManager : MonoBehaviour
     private const string CategoryCanvasObjectName = "NotificationCategoryCanvas";
     private const string CategoryLabelObjectName = "CategoryLabel";
     private const int MaximumNotifications = 5;
+    private const float DeploymentTargetPulseSpeed = 2.8f;
+    private const float DeploymentTargetPulseScale = 0.16f;
     private const int GeneratedSpritePixelsPerUnit = 1024;
     private const float CategoryContainerFontSize = 30f;
     private static readonly Color MutatedColor = new Color(0.72f, 0.12f, 1f, 1f);
@@ -430,7 +432,11 @@ public sealed class InfectionNotificationManager : MonoBehaviour
         if (cameraTransform != null)
         {
             Vector3 towardCamera = (cameraTransform.position - anchor).normalized;
-            float scale = GetReadableScale(cameraTransform, anchor) * scaleMultiplier;
+            float pulse = infectionSpawner != null && infectionSpawner.IsAwaitingDeploymentTargetSelection
+                ? (Mathf.Sin(Time.unscaledTime * DeploymentTargetPulseSpeed * Mathf.PI * 2f) + 1f) * 0.5f
+                : 0f;
+            float scale = GetReadableScale(cameraTransform, anchor) * scaleMultiplier *
+                (1f + pulse * DeploymentTargetPulseScale);
             Vector3 sideOffset = cameraTransform.right * (scale * 0.45f);
             Vector3 bobOffset = cameraTransform.up * (Mathf.Sin(state.bobTime) * bobAmplitude);
             state.gameObject.transform.position = anchor + towardCamera * foregroundOffset + sideOffset + bobOffset;

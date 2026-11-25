@@ -352,6 +352,9 @@ public sealed class InfectionSpawner : MonoBehaviour
 
     public IReadOnlyList<InfectionMarker> ActiveInfections => activeInfectionMarkers;
 
+    /// <summary>Returns whether a deployed unit is awaiting a map destination.</summary>
+    public bool IsAwaitingDeploymentTargetSelection => HasPendingDeploymentTargetSelection();
+
     /// <summary>Indicates whether the timed Respiratory Oxygen Boost perk is active.</summary>
     public static bool isOxygenBuffActive;
 

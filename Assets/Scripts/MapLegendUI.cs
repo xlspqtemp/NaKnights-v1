@@ -123,6 +123,8 @@ public sealed class MapLegendUI : MonoBehaviour
             fadeDuration = 0.12f
         };
         legendButton.onClick.AddListener(TogglePopup);
+        HudHoverTooltip hoverTooltip = buttonObject.AddComponent<HudHoverTooltip>();
+        hoverTooltip.Initialize(hudCanvas as RectTransform, buttonRect, "Map Legend");
         BuildPopup(hudCanvas);
     }
 

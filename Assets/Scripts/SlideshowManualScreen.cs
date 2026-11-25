@@ -108,6 +108,13 @@ public static class SlideshowManualScreen
         Button entryButton = entryObject.GetComponent<Button>();
         ConfigureButton(entryButton, iconImage, () => ShowConfigured(canvas), Color.white,
             new Color(0.72f, 1f, 1f, 1f), new Color(0.48f, 0.9f, 0.92f, 1f));
+
+        RectTransform canvasRect = canvas as RectTransform;
+        if (canvasRect != null)
+        {
+            HudHoverTooltip hoverTooltip = entryObject.AddComponent<HudHoverTooltip>();
+            hoverTooltip.Initialize(canvasRect, entryRect, "Manual");
+        }
     }
 
     /// <summary>
