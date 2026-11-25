@@ -11,15 +11,17 @@ public class MainMenuController : MonoBehaviour
 {
     private const string GameSceneName = "Game";
     private const string MainMenuSceneName = "MainMenu";
-    private const string BuiltInFontName = "LegacyRuntime.ttf";
     private const string BankGothicFontResourceName = "BankGothicMediumSDF";
     private const string EasyDifficultyIconResourcePath = "UI/Easy";
     private const string NormalDifficultyIconResourcePath = "UI/Normal";
     private const string MediumDifficultyIconResourcePath = "UI/Medium";
     private const string HardDifficultyIconResourcePath = "UI/hard";
     private const int DifficultyIconSize = 46;
-    private const int OverlayWidth = 920;
-    private const int OverlayHeight = 720;
+    private const int SelectedDifficultyIconSize = 164;
+    private const int DifficultyBadgeSize = 236;
+    private const int DifficultyBadgeTextureSize = 128;
+    private const int OverlayWidth = 1360;
+    private const int OverlayHeight = 740;
     private const int SubtitleFontSize = 22;
     private const int ButtonFontSize = 22;
     private const int DifficultyTitleFontSize = 38;
@@ -27,13 +29,16 @@ public class MainMenuController : MonoBehaviour
     private const int ValueFontSize = 18;
     private const int ButtonWidth = 250;
     private const int ButtonHeight = 64;
-    private const int DifficultyOptionWidth = 190;
-    private const int DifficultyOptionHeight = 112;
-    private const int DifficultyInfoPanelWidth = 760;
-    private const int DifficultyInfoPanelHeight = 196;
-    private const int DifficultyInfoPanelY = -138;
-    private const int DifficultyInfoHeaderFontSize = 19;
-    private const int DifficultyInfoBodyFontSize = 18;
+    private const int DifficultyOptionWidth = 350;
+    private const int DifficultyOptionHeight = 84;
+    private const int DifficultyInfoPanelWidth = 480;
+    private const int DifficultyInfoPanelHeight = 250;
+    private const int DifficultyInfoPanelY = -170;
+    private const int DifficultyInfoHeaderFontSize = 22;
+    private const int DifficultyInfoBodyFontSize = 17;
+    private const int ObjectivesPanelWidth = 330;
+    private const int ObjectivesPanelHeight = 430;
+    private const int ObjectivesHeaderFontSize = 24;
     private const int RowHeight = 112;
     private const int SliderWidth = 480;
     private const int SliderHeight = 30;
@@ -50,6 +55,8 @@ public class MainMenuController : MonoBehaviour
     private static readonly Color ButtonColor = new Color(0.075f, 0.37f, 0.39f, 1f);
     private static readonly Color TextColor = new Color(0.92f, 0.97f, 0.97f, 1f);
     private static readonly Color MutedTextColor = new Color(0.65f, 0.77f, 0.79f, 1f);
+    private static readonly Color DifficultyBadgeColor = new Color(0.02f, 0.12f, 0.14f, 0.96f);
+    private static readonly string[] DifficultyNames = { "EASY", "NORMAL", "MEDIUM", "HARD" };
     private static readonly string[] DifficultyDescriptions =
     {
         "Infections per day: 2\nMostly Mild/Moderate pathogens.\nNamed/Rare threats are extremely rare.\nPerfect for learning the core loop.",
@@ -66,10 +73,14 @@ public class MainMenuController : MonoBehaviour
     private Image[] difficultyOptionBackgrounds;
     private Image[] difficultyOptionIcons;
     private Outline[] difficultyOptionOutlines;
-    private Text[] difficultyOptionLockLabels;
+    private TextMeshProUGUI[] difficultyOptionLockLabels;
     private TextMeshProUGUI descriptionText;
+    private TextMeshProUGUI difficultyInfoHeader;
+    private Image selectedDifficultyIcon;
     private ScrollRect difficultyInfoScrollRect;
     private TMP_FontAsset difficultyInfoFont;
+    private static Sprite difficultyBadgeSprite;
+    private static TMP_FontAsset bankGothicFont;
     [Header("Manual Artwork")]
     [SerializeField] private Texture2D manualButtonTexture;
     [SerializeField] private Texture2D manualHomeTexture;
@@ -172,10 +183,10 @@ public class MainMenuController : MonoBehaviour
         overlayImage.raycastTarget = true;
 
         difficultyPanel = CreatePanel(overlay.transform, "DifficultySelection", OverlayWidth, OverlayHeight);
-        CreateText(difficultyPanel.transform, "DifficultyTitle", "Difficulty Selection", DifficultyTitleFontSize,
-            FontStyle.Bold, TextColor, TextAnchor.MiddleCenter, new Vector2(0, 292), new Vector2(820, 64));
-        CreateText(difficultyPanel.transform, "DifficultySubtitle", "Choose a difficulty preset.", SubtitleFontSize,
-            FontStyle.Normal, MutedTextColor, TextAnchor.MiddleCenter, new Vector2(0, 232), new Vector2(800, 42));
+        CreateText(difficultyPanel.transform, "DifficultyTitle", "DIFFICULTY SELECTION", DifficultyTitleFontSize,
+            FontStyle.Bold, TextColor, TextAnchor.MiddleCenter, new Vector2(-455f, 306f), new Vector2(420f, 58f));
+        CreateText(difficultyPanel.transform, "DifficultySubtitle", "CHOOSE A PRESET", SubtitleFontSize,
+            FontStyle.Normal, MutedTextColor, TextAnchor.MiddleCenter, new Vector2(-455f, 260f), new Vector2(380f, 34f));
 
         CreateDifficultySelector(difficultyPanel.transform);
 
@@ -200,12 +211,12 @@ public class MainMenuController : MonoBehaviour
     }
     private void CreateDifficultySelector(Transform parent)
     {
-        string[] optionLabels = { "Easy", "Normal", "Medium", "Hard" };
+        string[] optionLabels = { "EASY", "NORMAL", "MEDIUM", "HARD" };
         difficultyOptionButtons = new Button[optionLabels.Length];
         difficultyOptionBackgrounds = new Image[optionLabels.Length];
         difficultyOptionIcons = new Image[optionLabels.Length];
         difficultyOptionOutlines = new Outline[optionLabels.Length];
-        difficultyOptionLockLabels = new Text[optionLabels.Length];
+        difficultyOptionLockLabels = new TextMeshProUGUI[optionLabels.Length];
         Sprite[] difficultyIcons =
         {
             LoadDifficultyIcon(EasyDifficultyIconResourcePath),
@@ -213,21 +224,19 @@ public class MainMenuController : MonoBehaviour
             LoadDifficultyIcon(MediumDifficultyIconResourcePath),
             LoadDifficultyIcon(HardDifficultyIconResourcePath)
         };
-        const int horizontalSpacing = 18;
-        int totalWidth = optionLabels.Length * DifficultyOptionWidth + (optionLabels.Length - 1) * horizontalSpacing;
-        int leftEdge = -totalWidth / 2 + DifficultyOptionWidth / 2;
+        int leftEdge = -455;
 
         for (int index = 0; index < optionLabels.Length; index++)
         {
             int optionIndex = index;
-            Vector2 position = new Vector2(leftEdge + index * (DifficultyOptionWidth + horizontalSpacing), 54f);
+            Vector2 position = new Vector2(leftEdge, 190f - index * 120f);
             Button button = CreateButton(parent, "DifficultyOption" + optionLabels[index] + "Button",
                 optionLabels[index], DifficultyOptionWidth, DifficultyOptionHeight, position,
                 () => SetSelectedDifficulty(optionIndex));
             HideDifficultyOptionExtraText(button);
             Image difficultyIcon = CreateImage(button.transform, "DifficultyIcon", Color.white,
                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0f, 25f), new Vector2(DifficultyIconSize, DifficultyIconSize));
+                new Vector2(-128f, 0f), new Vector2(DifficultyIconSize, DifficultyIconSize));
             difficultyIcon.sprite = difficultyIcons[index];
             difficultyIcon.preserveAspect = true;
             difficultyIcon.raycastTarget = false;
@@ -237,8 +246,8 @@ public class MainMenuController : MonoBehaviour
             if (buttonLabelTransform != null)
             {
                 RectTransform buttonLabelRect = buttonLabelTransform.GetComponent<RectTransform>();
-                SetRect(buttonLabelRect, new Vector2(0f, 0f), new Vector2(1f, 0f),
-                    new Vector2(0.5f, 0f), new Vector2(0f, 6f), new Vector2(-12f, 32f));
+                SetRect(buttonLabelRect, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f), new Vector2(24f, 0f), new Vector2(220f, 58f));
             }
 
             Outline outline = button.gameObject.AddComponent<Outline>();
@@ -249,7 +258,7 @@ public class MainMenuController : MonoBehaviour
             difficultyOptionButtons[index] = button;
             difficultyOptionBackgrounds[index] = button.GetComponent<Image>();
             difficultyOptionOutlines[index] = outline;
-            Text lockLabel = CreateText(button.transform, "DifficultyLockedLabel", "LOCKED", 12,
+            TextMeshProUGUI lockLabel = CreateText(button.transform, "DifficultyLockedLabel", "LOCKED", 12,
                 FontStyle.Bold, MutedTextColor, TextAnchor.MiddleCenter, new Vector2(0f, -18f),
                 new Vector2(148f, 24f));
             lockLabel.gameObject.SetActive(false);
@@ -257,6 +266,7 @@ public class MainMenuController : MonoBehaviour
         }
 
         CreateDifficultyInfoPanel(parent);
+        CreateObjectivesPanel(parent);
         SetSelectedDifficulty(selectedDifficultyIndex);
     }
 
@@ -282,24 +292,62 @@ public class MainMenuController : MonoBehaviour
 
     private void CreateDifficultyInfoPanel(Transform parent)
     {
+        difficultyInfoFont = Resources.Load<TMP_FontAsset>(BankGothicFontResourceName);
+        if (difficultyInfoFont == null)
+            difficultyInfoFont = TMP_Settings.defaultFontAsset;
+
+        Image badgeBackground = CreateImage(parent, "SelectedDifficultyBadge", DifficultyBadgeColor,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 132f), new Vector2(DifficultyBadgeSize, DifficultyBadgeSize));
+        badgeBackground.sprite = GetDifficultyBadgeSprite();
+        badgeBackground.raycastTarget = false;
+        Outline badgeOutline = badgeBackground.gameObject.AddComponent<Outline>();
+        badgeOutline.effectColor = AccentColor;
+        badgeOutline.effectDistance = new Vector2(3f, -3f);
+        badgeOutline.useGraphicAlpha = true;
+
+        selectedDifficultyIcon = CreateImage(parent, "SelectedDifficultyIcon", Color.white,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 132f), new Vector2(SelectedDifficultyIconSize, SelectedDifficultyIconSize));
+        selectedDifficultyIcon.preserveAspect = true;
+        selectedDifficultyIcon.raycastTarget = false;
+
         GameObject panel = CreatePanel(parent, "SelectedDifficultyInfoPanel",
             DifficultyInfoPanelWidth, DifficultyInfoPanelHeight);
         RectTransform panelRect = panel.GetComponent<RectTransform>();
         panelRect.anchoredPosition = new Vector2(0f, DifficultyInfoPanelY);
-
         Outline outline = panel.AddComponent<Outline>();
         outline.effectColor = AccentColor;
         outline.effectDistance = new Vector2(2f, -2f);
         outline.useGraphicAlpha = true;
 
-        difficultyInfoFont = Resources.Load<TMP_FontAsset>(BankGothicFontResourceName);
-        if (difficultyInfoFont == null)
-            difficultyInfoFont = TMP_Settings.defaultFontAsset;
-
-        CreateDifficultyInfoLabel(panel.transform, "DifficultyInfoHeader", "SELECTED DIFFICULTY",
+        difficultyInfoHeader = CreateDifficultyInfoLabel(panel.transform, "DifficultyInfoHeader", "NORMAL",
             DifficultyInfoHeaderFontSize, AccentColor, TextAlignmentOptions.Center,
-            new Vector2(0f, 70f), new Vector2(DifficultyInfoPanelWidth - 48f, 30f));
-        CreateDifficultyInfoScrollView(panel.transform);
+            new Vector2(0f, 92f), new Vector2(DifficultyInfoPanelWidth - 48f, 34f));
+        descriptionText = CreateDifficultyInfoLabel(panel.transform, "DifficultyInfoDescription", "",
+            DifficultyInfoBodyFontSize, Color.white, TextAlignmentOptions.TopLeft,
+            new Vector2(0f, -42f), new Vector2(DifficultyInfoPanelWidth - 64f, 150f));
+        descriptionText.textWrappingMode = TextWrappingModes.Normal;
+        descriptionText.overflowMode = TextOverflowModes.Overflow;
+    }
+
+    private void CreateObjectivesPanel(Transform parent)
+    {
+        GameObject panel = CreatePanel(parent, "DifficultyObjectivesPanel",
+            ObjectivesPanelWidth, ObjectivesPanelHeight);
+        RectTransform panelRect = panel.GetComponent<RectTransform>();
+        panelRect.anchoredPosition = new Vector2(460f, 62f);
+        Outline outline = panel.AddComponent<Outline>();
+        outline.effectColor = AccentColor;
+        outline.effectDistance = new Vector2(2f, -2f);
+        outline.useGraphicAlpha = true;
+
+        CreateDifficultyInfoLabel(panel.transform, "ObjectivesHeader", "OBJECTIVES",
+            ObjectivesHeaderFontSize, AccentColor, TextAlignmentOptions.Center,
+            new Vector2(0f, 174f), new Vector2(ObjectivesPanelWidth - 36f, 42f));
+        CreateDifficultyInfoLabel(panel.transform, "ObjectivesComingLater", "COMING LATER",
+            DifficultyInfoBodyFontSize + 2, Color.white, TextAlignmentOptions.Center,
+            Vector2.zero, new Vector2(ObjectivesPanelWidth - 48f, 120f));
     }
 
     private void CreateDifficultyInfoScrollView(Transform parent)
@@ -438,13 +486,19 @@ public class MainMenuController : MonoBehaviour
             return;
 
         int descriptionIndex = Mathf.Clamp(selectedDifficultyIndex, 0, DifficultyDescriptions.Length - 1);
+        if (difficultyInfoHeader != null)
+            difficultyInfoHeader.text = DifficultyNames[descriptionIndex] + " DIFFICULTY";
+        if (selectedDifficultyIcon != null && difficultyOptionIcons != null &&
+            descriptionIndex < difficultyOptionIcons.Length && difficultyOptionIcons[descriptionIndex] != null)
+        {
+            selectedDifficultyIcon.sprite = difficultyOptionIcons[descriptionIndex].sprite;
+            selectedDifficultyIcon.color = Color.white;
+        }
         descriptionText.text = DifficultyDescriptions[descriptionIndex];
         descriptionText.color = Color.white;
         descriptionText.alpha = 1f;
         LayoutRebuilder.ForceRebuildLayoutImmediate(descriptionText.rectTransform);
         Canvas.ForceUpdateCanvases();
-        if (difficultyInfoScrollRect != null)
-            difficultyInfoScrollRect.verticalNormalizedPosition = 1f;
     }
 
     private static string FormatDifficultyValue(float value)
@@ -467,7 +521,7 @@ public class MainMenuController : MonoBehaviour
         CreateText(row.transform, settingName + "Label", displayLabel, RowTitleFontSize, FontStyle.Bold,
             TextColor, TextAnchor.MiddleLeft, new Vector2(24, 30), new Vector2(RowLabelWidth, 34),
             new Vector2(0, 0.5f));
-        Text valueText = CreateText(row.transform, settingName + "Value", initialValue.ToString(), ValueFontSize,
+        TextMeshProUGUI valueText = CreateText(row.transform, settingName + "Value", initialValue.ToString(), ValueFontSize,
             FontStyle.Bold, AccentColor, TextAnchor.MiddleRight, new Vector2(-24, 30),
             new Vector2(LevelValueWidth, 34), new Vector2(1f, 0.5f));
 
@@ -573,6 +627,42 @@ public class MainMenuController : MonoBehaviour
         return Sprite.Create(iconTexture, new Rect(0f, 0f, iconTexture.width, iconTexture.height),
             new Vector2(0.5f, 0.5f), 100f);
     }
+    private static Sprite GetDifficultyBadgeSprite()
+    {
+        if (difficultyBadgeSprite != null)
+            return difficultyBadgeSprite;
+
+        Texture2D texture = new Texture2D(DifficultyBadgeTextureSize, DifficultyBadgeTextureSize,
+            TextureFormat.RGBA32, false);
+        texture.name = "Difficulty Badge Texture";
+        texture.filterMode = FilterMode.Bilinear;
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        Color32[] pixels = new Color32[DifficultyBadgeTextureSize * DifficultyBadgeTextureSize];
+        float center = DifficultyBadgeTextureSize * 0.5f;
+        float radius = center - 2f;
+        for (int y = 0; y < DifficultyBadgeTextureSize; y++)
+        {
+            for (int x = 0; x < DifficultyBadgeTextureSize; x++)
+            {
+                float dx = x + 0.5f - center;
+                float dy = y + 0.5f - center;
+                float alpha = Mathf.Clamp01(radius + 0.5f - Mathf.Sqrt(dx * dx + dy * dy));
+                pixels[y * DifficultyBadgeTextureSize + x] = new Color32(255, 255, 255,
+                    (byte)Mathf.RoundToInt(alpha * 255f));
+            }
+        }
+
+        texture.SetPixels32(pixels);
+        texture.Apply(false, true);
+        difficultyBadgeSprite = Sprite.Create(texture,
+            new Rect(0f, 0f, DifficultyBadgeTextureSize, DifficultyBadgeTextureSize),
+            new Vector2(0.5f, 0.5f), DifficultyBadgeTextureSize);
+        difficultyBadgeSprite.name = "Difficulty Badge Sprite";
+        return difficultyBadgeSprite;
+    }
+
+
 
     private static Image CreateImage(Transform parent, string objectName, Color color,
         Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPosition, Vector2 sizeDelta)
@@ -586,28 +676,49 @@ public class MainMenuController : MonoBehaviour
         return image;
     }
 
-    private static Text CreateText(Transform parent, string objectName, string content, int fontSize,
+    private static TextMeshProUGUI CreateText(Transform parent, string objectName, string content, int fontSize,
         FontStyle fontStyle, Color color, TextAnchor alignment, Vector2 anchoredPosition, Vector2 sizeDelta,
         Vector2? anchor = null, bool stretch = false)
     {
-        GameObject textObject = new GameObject(objectName, typeof(RectTransform), typeof(Text));
+        GameObject textObject = new GameObject(objectName,
+            typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
         textObject.transform.SetParent(parent, false);
         RectTransform textRect = textObject.GetComponent<RectTransform>();
         Vector2 resolvedAnchor = anchor ?? new Vector2(0.5f, 0.5f);
         SetRect(textRect, stretch ? Vector2.zero : resolvedAnchor, stretch ? Vector2.one : resolvedAnchor,
             stretch ? new Vector2(0.5f, 0.5f) : resolvedAnchor, anchoredPosition, sizeDelta);
 
-        Text text = textObject.GetComponent<Text>();
-        text.font = Resources.GetBuiltinResource<Font>(BuiltInFontName);
+        if (bankGothicFont == null)
+            bankGothicFont = Resources.Load<TMP_FontAsset>(BankGothicFontResourceName);
+
+        TextMeshProUGUI text = textObject.GetComponent<TextMeshProUGUI>();
+        text.font = bankGothicFont != null ? bankGothicFont : TMP_Settings.defaultFontAsset;
         text.text = content;
         text.fontSize = fontSize;
-        text.fontStyle = fontStyle;
+        text.fontStyle = fontStyle == FontStyle.Bold ? FontStyles.Bold :
+            fontStyle == FontStyle.Italic ? FontStyles.Italic : FontStyles.Normal;
         text.color = color;
-        text.alignment = alignment;
-        text.horizontalOverflow = HorizontalWrapMode.Wrap;
-        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.alignment = ConvertTextAlignment(alignment);
+        text.textWrappingMode = TextWrappingModes.Normal;
+        text.overflowMode = TextOverflowModes.Overflow;
         text.raycastTarget = false;
         return text;
+    }
+
+    private static TextAlignmentOptions ConvertTextAlignment(TextAnchor alignment)
+    {
+        switch (alignment)
+        {
+            case TextAnchor.UpperLeft: return TextAlignmentOptions.TopLeft;
+            case TextAnchor.UpperCenter: return TextAlignmentOptions.Top;
+            case TextAnchor.UpperRight: return TextAlignmentOptions.TopRight;
+            case TextAnchor.MiddleLeft: return TextAlignmentOptions.MidlineLeft;
+            case TextAnchor.MiddleRight: return TextAlignmentOptions.MidlineRight;
+            case TextAnchor.LowerLeft: return TextAlignmentOptions.BottomLeft;
+            case TextAnchor.LowerCenter: return TextAlignmentOptions.Bottom;
+            case TextAnchor.LowerRight: return TextAlignmentOptions.BottomRight;
+            default: return TextAlignmentOptions.Center;
+        }
     }
 
     private static void SetRect(RectTransform rect, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
