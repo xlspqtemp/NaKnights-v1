@@ -10,6 +10,8 @@ public class RandomEventSystem : MonoBehaviour
     private const float MINIMUM_WEIGHT = 0.0001f;
 
     public static RandomEventSystem Instance { get; private set; }
+    public static int RunEventCount { get; private set; }
+    public static event Action<int> OnRunEventCountChanged;
 
     public static event Action<RandomEventData> OnRandomEventTriggered;
 
@@ -34,6 +36,8 @@ public class RandomEventSystem : MonoBehaviour
         }
 
         Instance = this;
+        RunEventCount = 0;
+        OnRunEventCountChanged?.Invoke(RunEventCount);
         EnsureDifficultyPresets();
     }
 
@@ -167,6 +171,8 @@ public class RandomEventSystem : MonoBehaviour
     private void DispatchRandomEvent(RandomEventData eventData)
     {
         if (Time.timeScale == 0f) return;
+        RunEventCount++;
+        OnRunEventCountChanged?.Invoke(RunEventCount);
         if (eventData.triggersQTE)
             GameplaySpeed.BeginQTE(eventData.eventName);
 

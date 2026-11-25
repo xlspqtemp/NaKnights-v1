@@ -12,6 +12,7 @@ public sealed class HudLeftControlRail : MonoBehaviour
     private const string ConsoleIconResourcePath = "UI/Console icon";
     private const string LayerIconObjectName = "LayerSelectionIcon";
     private const string QteBadgeObjectName = "ActiveQTEBadge";
+    private const string EventCountBadgeObjectName = "RunRandomEventCountBadge";
     private const string SnapshotButtonObjectName = "HumanSnapshotIconButton";
     private const string ConsoleButtonObjectName = "ConsoleLogIconButton";
     private const string SnapshotContainerResourcePath = "UI/Human snapshot container fixed";
@@ -55,6 +56,8 @@ public sealed class HudLeftControlRail : MonoBehaviour
     private Button layerSelectionButton;
     private Image qteBadgeBackground;
     private TextMeshProUGUI qteBadgeLabel;
+    private Image eventCountBadgeBackground;
+    private TextMeshProUGUI eventCountBadgeLabel;
     private LayerSelectionDropdownController layerDropdownController;
     private bool panelsAvailable;
     private bool snapshotOpen;
@@ -98,6 +101,8 @@ public sealed class HudLeftControlRail : MonoBehaviour
 
         QTETracker.ActiveQTECountChanged -= HandleActiveQTECountChanged;
         QTETracker.ActiveQTECountChanged += HandleActiveQTECountChanged;
+        RandomEventSystem.OnRunEventCountChanged -= HandleRunEventCountChanged;
+        RandomEventSystem.OnRunEventCountChanged += HandleRunEventCountChanged;
 
         snapshotCanvasGroup = GetOrAddCanvasGroup(snapshotRect.gameObject);
         consoleCanvasGroup = GetOrAddCanvasGroup(consoleRect.gameObject);
@@ -131,6 +136,7 @@ public sealed class HudLeftControlRail : MonoBehaviour
 
         snapshotIconButton = CreateIconButton(SnapshotButtonObjectName, SnapshotIconResourcePath, ToggleSnapshot);
         consoleIconButton = CreateIconButton(ConsoleButtonObjectName, ConsoleIconResourcePath, ToggleConsole);
+        CreateRunEventCountBadge();
         AddHoverTooltip(layerToggleRect.gameObject, "Layer Selection");
         AddHoverTooltip(snapshotIconButton.gameObject, "Human Snapshot");
         AddHoverTooltip(consoleIconButton.gameObject, "Console");
@@ -147,6 +153,7 @@ public sealed class HudLeftControlRail : MonoBehaviour
     private void OnDestroy()
     {
         QTETracker.ActiveQTECountChanged -= HandleActiveQTECountChanged;
+        RandomEventSystem.OnRunEventCountChanged -= HandleRunEventCountChanged;
         if (layerDropdownController != null)
             layerDropdownController.ExpandedStateChanged -= HandleLayerDropdownExpandedStateChanged;
     }
@@ -154,6 +161,11 @@ public sealed class HudLeftControlRail : MonoBehaviour
     private void HandleActiveQTECountChanged()
     {
         UpdateQteCountBadge();
+    }
+
+    private void HandleRunEventCountChanged(int eventCount)
+    {
+        UpdateRunEventCountBadge(eventCount);
     }
 
     private void HandleLayerDropdownExpandedStateChanged(bool isExpanded)
@@ -338,6 +350,65 @@ public sealed class HudLeftControlRail : MonoBehaviour
         int activeQteCount = QTETracker.GetActiveQTECount();
         qteBadgeLabel.text = activeQteCount > 99 ? "99+" : activeQteCount.ToString();
         qteBadgeBackground.gameObject.SetActive(activeQteCount > 0);
+    }
+
+    private void CreateRunEventCountBadge()
+    {
+        if (consoleIconButton == null)
+            return;
+
+        Transform existingBadge = consoleIconButton.transform.Find(EventCountBadgeObjectName);
+        if (existingBadge != null)
+            Destroy(existingBadge.gameObject);
+
+        GameObject badgeObject = new GameObject(EventCountBadgeObjectName,
+            typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        badgeObject.transform.SetParent(consoleIconButton.transform, false);
+
+        RectTransform badgeRect = badgeObject.GetComponent<RectTransform>();
+        badgeRect.anchorMin = new Vector2(1f, 1f);
+        badgeRect.anchorMax = new Vector2(1f, 1f);
+        badgeRect.pivot = new Vector2(0.5f, 0.5f);
+        badgeRect.sizeDelta = new Vector2(QteBadgeSize, QteBadgeSize);
+        badgeRect.anchoredPosition = new Vector2(-8f, -36f);
+
+        eventCountBadgeBackground = badgeObject.GetComponent<Image>();
+        eventCountBadgeBackground.sprite = GetQteBadgeSprite();
+        eventCountBadgeBackground.color = QteBadgeColor;
+        eventCountBadgeBackground.raycastTarget = false;
+
+        GameObject labelObject = new GameObject("Count", typeof(RectTransform),
+            typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        labelObject.transform.SetParent(badgeObject.transform, false);
+        RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+        labelRect.anchorMin = Vector2.zero;
+        labelRect.anchorMax = Vector2.one;
+        labelRect.offsetMin = Vector2.zero;
+        labelRect.offsetMax = Vector2.zero;
+
+        eventCountBadgeLabel = labelObject.GetComponent<TextMeshProUGUI>();
+        eventCountBadgeLabel.font = Resources.Load<TMP_FontAsset>(QteBadgeFontResourcePath);
+        if (eventCountBadgeLabel.font == null)
+            eventCountBadgeLabel.font = TMP_Settings.defaultFontAsset;
+        eventCountBadgeLabel.alignment = TextAlignmentOptions.Center;
+        eventCountBadgeLabel.fontStyle = FontStyles.Bold;
+        eventCountBadgeLabel.fontSize = 15f;
+        eventCountBadgeLabel.enableAutoSizing = true;
+        eventCountBadgeLabel.fontSizeMin = 10f;
+        eventCountBadgeLabel.fontSizeMax = 15f;
+        eventCountBadgeLabel.color = Color.white;
+        eventCountBadgeLabel.raycastTarget = false;
+
+        UpdateRunEventCountBadge(RandomEventSystem.RunEventCount);
+    }
+
+    private void UpdateRunEventCountBadge(int eventCount)
+    {
+        if (eventCountBadgeBackground == null || eventCountBadgeLabel == null)
+            return;
+
+        eventCountBadgeLabel.text = eventCount > 99 ? "99+" : eventCount.ToString();
+        eventCountBadgeBackground.gameObject.SetActive(eventCount > 0);
     }
 
     private static Sprite GetQteBadgeSprite()
