@@ -46,6 +46,8 @@ public class MainMenuController : MonoBehaviour
     private const int RowLabelWidth = 330;
     private const int LevelValueWidth = 54;
     private const int StartButtonY = -290;
+    private const int BackButtonX = -455;
+    private const int StartButtonX = 500;
 
     private static readonly Color OverlayColor = new Color(0.012f, 0.022f, 0.032f, 0.82f);
     private static readonly Color PanelColor = new Color(0.035f, 0.072f, 0.09f, 0.98f);
@@ -191,9 +193,9 @@ public class MainMenuController : MonoBehaviour
         CreateDifficultySelector(difficultyPanel.transform);
 
         CreateButton(difficultyPanel.transform, "StartGameButton", "Start Game", ButtonWidth, ButtonHeight,
-            new Vector2(0, StartButtonY), StartGame);
-        CreateButton(difficultyPanel.transform, "DifficultyBackButton", "Back", ButtonWidth, ButtonHeight,
-            new Vector2(-300, StartButtonY), ReturnToMainMenu);
+            new Vector2(StartButtonX, StartButtonY), StartGame);
+        CreateButton(difficultyPanel.transform, "DifficultyBackButton", "Back", DifficultyOptionWidth, ButtonHeight,
+            new Vector2(BackButtonX, StartButtonY), ReturnToMainMenu);
         difficultyPanel.SetActive(false);
     }
 
