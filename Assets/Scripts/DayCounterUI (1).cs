@@ -21,6 +21,8 @@ using UnityEngine.UI;
 /// </summary>
 public class DayCounterUI : MonoBehaviour
 {
+    private const string BankGothicFontResourcePath = "BankGothicMediumSDF";
+
     public enum ProgressionMode { RealTime, Manual, ObjectiveBased, Hybrid }
 
     [Header("UI References")]
@@ -97,6 +99,12 @@ public class DayCounterUI : MonoBehaviour
         if (layoutGroup != null)
             layoutGroup.enabled = false;
 
+        TMP_FontAsset bankGothicFont = Resources.Load<TMP_FontAsset>(BankGothicFontResourcePath);
+        ApplyHeaderFont(dayLabel, bankGothicFont);
+        ApplyHeaderFont(statusBadge, bankGothicFont);
+        ApplyHeaderFont(timeLabel, bankGothicFont);
+        ApplyHeaderFont(weatherLabel, bankGothicFont);
+
         ConfigureHeaderLabel(dayLabel, new Vector2(12f, 0f), new Vector2(84f, 0f));
         ConfigureHeaderLabel(timeLabel, new Vector2(98f, 0f), new Vector2(94f, 0f));
 
@@ -114,6 +122,12 @@ public class DayCounterUI : MonoBehaviour
             timeLabel.alignment = TextAlignmentOptions.MidlineLeft;
             timeLabel.textWrappingMode = TextWrappingModes.NoWrap;
         }
+    }
+
+    private static void ApplyHeaderFont(TextMeshProUGUI label, TMP_FontAsset font)
+    {
+        if (label != null && font != null)
+            label.font = font;
     }
 
     private static void ConfigureHeaderLabel(TextMeshProUGUI label, Vector2 position, Vector2 size)

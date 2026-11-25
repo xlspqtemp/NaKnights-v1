@@ -5,6 +5,7 @@ using UnityEngine.UI;
 /// <summary>Creates and updates the in-game fast-forward button beside the Day Counter.</summary>
 public sealed class GameplaySpeedButton : MonoBehaviour
 {
+    private const string FastForwardIconResourcePath = "UI/FF icon button";
     private static readonly Color AccentColor = new Color(0.1f, 0.75f, 0.88f, 1f);
     private static readonly Color PanelColor = new Color(0.035f, 0.055f, 0.075f, 0.96f);
     private const float ButtonWidth = 56f;
@@ -98,8 +99,7 @@ public sealed class GameplaySpeedButton : MonoBehaviour
         };
         speedButton.onClick.AddListener(GameplaySpeed.Cycle);
 
-        CreateText("FastForwardSymbol", speedButtonRect, ">>", 21f, FontStyles.Bold,
-            new Vector2(0f, 0.36f), new Vector2(1f, 1f), AccentColor, out _);
+        CreateFastForwardIcon(speedButtonRect);
         CreateText("SpeedModeLabel", speedButtonRect, "1x", 12f, FontStyles.Bold,
             new Vector2(0f, 0.1f), new Vector2(1f, 0.4f), AccentColor, out speedLabel);
         CreateText("QTEOverrideLabel", speedButtonRect, string.Empty, 8f, FontStyles.Bold,
@@ -118,6 +118,34 @@ public sealed class GameplaySpeedButton : MonoBehaviour
             panelTopRight.x - canvasBounds.xMin + ButtonGap,
             panelTopRight.y - canvasBounds.yMax - dayCounterRect.rect.height * 0.5f + ButtonHeight * 0.5f);
     }
+    private void CreateFastForwardIcon(RectTransform parent)
+    {
+        Sprite iconSprite = Resources.Load<Sprite>(FastForwardIconResourcePath);
+        if (iconSprite == null)
+        {
+            Debug.LogWarning("Fast-forward icon was not found at Resources/" + FastForwardIconResourcePath + ".png", this);
+            CreateText("FastForwardSymbol", parent, ">>", 21f, FontStyles.Bold,
+                new Vector2(0f, 0.36f), new Vector2(1f, 1f), AccentColor, out _);
+            return;
+        }
+
+        GameObject iconObject = new GameObject("FastForwardIcon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        iconObject.transform.SetParent(parent, false);
+        RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+        iconRect.anchorMin = new Vector2(0.5f, 1f);
+        iconRect.anchorMax = new Vector2(0.5f, 1f);
+        iconRect.pivot = new Vector2(0.5f, 1f);
+        iconRect.anchoredPosition = new Vector2(0f, -3f);
+        iconRect.sizeDelta = new Vector2(34f, 24f);
+
+        Image iconImage = iconObject.GetComponent<Image>();
+        iconImage.sprite = iconSprite;
+        iconImage.color = Color.white;
+        iconImage.preserveAspect = true;
+        iconImage.raycastTarget = false;
+    }
+
+
 
     private void CreateText(
         string objectName,

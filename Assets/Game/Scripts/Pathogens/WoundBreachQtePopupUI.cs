@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using UnityEngine.Video;
 
@@ -26,10 +27,14 @@ public sealed class WoundBreachQtePopupUI : MonoBehaviour
     private const float VideoHeaderGap = 12f;
     private const float OverlayDimAlpha = 0.72f;
     private static readonly Color OverlayDimColor = new Color(0.002f, 0.012f, 0.022f, OverlayDimAlpha);
-    private static readonly Color CyanPanelColor = new Color(0.02f, 0.78f, 0.88f, 0.98f);
+    private static readonly Color CyanPanelColor = new Color(0.015f, 0.36f, 0.42f, 0.98f);
     private static readonly Color CyanAccentColor = new Color(0.16f, 0.96f, 1f, 1f);
     private static readonly Color DarkControlColor = new Color(0.005f, 0.035f, 0.05f, 1f);
-    private static readonly Color ButtonHoverColor = new Color(0.02f, 0.12f, 0.15f, 1f);
+    private static readonly Color FocusButtonColor = new Color(0.025f, 0.84f, 0.94f, 1f);
+    private static readonly Color FocusButtonPulseColor = new Color(0.18f, 0.98f, 1f, 1f);
+    private static readonly Color SkipButtonColor = new Color(0.96f, 0.035f, 0.055f, 1f);
+    private static readonly Color SkipButtonPulseColor = new Color(1f, 0.22f, 0.18f, 1f);
+    private static readonly Color SkipLabelColor = new Color(1f, 1f, 1f, 1f);
 
     private RectTransform canvasRect;
     private RectTransform panelRect;
@@ -149,7 +154,7 @@ public sealed class WoundBreachQtePopupUI : MonoBehaviour
         panelOutline.effectDistance = new Vector2(3f, -3f);
 
         TextMeshProUGUI header = CreateText("Wound Alert Header", panelRect,
-            "WOUND BREACH DETECTED", 30f, DarkControlColor, TextAlignmentOptions.Center);
+            "WOUND BREACH DETECTED", 30f, CyanAccentColor, TextAlignmentOptions.Center);
         header.rectTransform.anchorMin = new Vector2(0.5f, 1f);
         header.rectTransform.anchorMax = new Vector2(0.5f, 1f);
         header.rectTransform.pivot = new Vector2(0.5f, 1f);
@@ -196,8 +201,10 @@ public sealed class WoundBreachQtePopupUI : MonoBehaviour
         if (videoPlayer.clip == null)
             Debug.LogWarning("Wound breach popup video was not found at Resources/" + VideoResourcePath + ".mp4", this);
 
-        CreateButton(panelRect, "Focus", "FOCUS", new Vector2(-125f, ButtonBottomInset), HandleFocusClicked);
-        CreateButton(panelRect, "Skip", "SKIP", new Vector2(125f, ButtonBottomInset), HandleSkipClicked);
+        CreateButton(panelRect, "Focus", "FOCUS", new Vector2(-125f, ButtonBottomInset),
+            FocusButtonColor, DarkControlColor, FocusButtonPulseColor, HandleFocusClicked);
+        CreateButton(panelRect, "Skip", "SKIP", new Vector2(125f, ButtonBottomInset),
+            SkipButtonColor, SkipLabelColor, SkipButtonPulseColor, HandleSkipClicked);
         ApplyLayout();
         overlayRoot.SetActive(false);
     }
@@ -325,7 +332,8 @@ public sealed class WoundBreachQtePopupUI : MonoBehaviour
     }
 
     private void CreateButton(Transform parent, string objectName, string label,
-        Vector2 anchoredPosition, UnityEngine.Events.UnityAction onClick)
+        Vector2 anchoredPosition, Color buttonColor, Color labelColor, Color pulseColor,
+        UnityEngine.Events.UnityAction onClick)
     {
         GameObject buttonObject = new GameObject(objectName,
             typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
@@ -338,16 +346,18 @@ public sealed class WoundBreachQtePopupUI : MonoBehaviour
         buttonRect.sizeDelta = new Vector2(240f, ButtonHeight);
 
         Image buttonImage = buttonObject.GetComponent<Image>();
-        buttonImage.color = DarkControlColor;
+        buttonImage.color = buttonColor;
         buttonImage.raycastTarget = true;
         Button button = buttonObject.GetComponent<Button>();
         button.targetGraphic = buttonImage;
         button.transition = Selectable.Transition.ColorTint;
-        button.colors = CreateButtonColors();
+        button.colors = CreateButtonColors(buttonColor);
         button.onClick.AddListener(onClick);
+        WoundBreachButtonHoverPulse hoverPulse = buttonObject.AddComponent<WoundBreachButtonHoverPulse>();
+        hoverPulse.Initialize(buttonImage, buttonColor, pulseColor);
 
         TextMeshProUGUI labelText = CreateText(objectName + " Label", buttonObject.transform,
-            label, 22f, CyanAccentColor, TextAlignmentOptions.Center);
+            label, 22f, labelColor, TextAlignmentOptions.Center);
         RectTransform labelRect = labelText.rectTransform;
         labelRect.anchorMin = Vector2.zero;
         labelRect.anchorMax = Vector2.one;
@@ -385,17 +395,76 @@ public sealed class WoundBreachQtePopupUI : MonoBehaviour
         return createdObject;
     }
 
-    private static ColorBlock CreateButtonColors()
+    private static ColorBlock CreateButtonColors(Color buttonColor)
     {
         return new ColorBlock
         {
-            normalColor = DarkControlColor,
-            highlightedColor = ButtonHoverColor,
-            pressedColor = CyanPanelColor,
-            selectedColor = ButtonHoverColor,
-            disabledColor = DarkControlColor,
+            normalColor = buttonColor,
+            highlightedColor = buttonColor,
+            pressedColor = buttonColor,
+            selectedColor = buttonColor,
+            disabledColor = buttonColor,
             colorMultiplier = 1f,
             fadeDuration = 0.1f
         };
+    }
+}
+
+/// <summary>Adds a subtle size and color pulse while a wound alert button is hovered.</summary>
+internal sealed class WoundBreachButtonHoverPulse : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+{
+    private const float PulseFrequency = 3.4f;
+    private const float MaximumScaleIncrease = 0.045f;
+
+    private Image targetImage;
+    private Color baseColor;
+    private Color pulseColor;
+    private Vector3 baseScale;
+    private bool isHovered;
+
+    /// <summary>Configures the button image and colors used by the hover pulse.</summary>
+    public void Initialize(Image image, Color restingColor, Color highlightedColor)
+    {
+        targetImage = image;
+        baseColor = restingColor;
+        pulseColor = highlightedColor;
+        baseScale = transform.localScale;
+    }
+
+    /// <summary>Starts the pulse when the pointer enters the button.</summary>
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        isHovered = true;
+    }
+
+    /// <summary>Restores the button's resting appearance when the pointer leaves.</summary>
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        isHovered = false;
+    }
+
+    private void LateUpdate()
+    {
+        if (targetImage == null)
+            return;
+
+        if (!isHovered)
+        {
+            targetImage.color = baseColor;
+            transform.localScale = baseScale;
+            return;
+        }
+
+        float pulse = (Mathf.Sin(Time.unscaledTime * PulseFrequency * Mathf.PI * 2f) + 1f) * 0.5f;
+        targetImage.color = Color.Lerp(baseColor, pulseColor, pulse);
+        transform.localScale = baseScale * (1f + pulse * MaximumScaleIncrease);
+    }
+
+    private void OnDisable()
+    {
+        isHovered = false;
+        if (targetImage != null)
+            targetImage.color = baseColor;
+        transform.localScale = baseScale;
     }
 }
