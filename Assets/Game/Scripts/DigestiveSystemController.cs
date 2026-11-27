@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
@@ -37,20 +38,53 @@ public sealed class DigestiveSystemController : MonoBehaviour
     private const float DigestiveQteVerticalOffset = BarrierGaugeVerticalOffset;
     private const string VomitButtonIconResourcePath = "UI/Vomit icon final";
     private const float QteButtonIconSize = 280f;
+    private const string WindAssistRootObjectName = "DigestiveBarrierWindAssist";
+    private const string WindButtonObjectName = "WindHoldButton";
+    private const string WindButtonLabelObjectName = "WindButtonLabel";
+    private const string WindLockedTooltipObjectName = "WindLockedTooltip";
+    private const string WindProgressTrackObjectName = "WindProgressTrack";
+    private const string WindProgressFillObjectName = "WindProgressFill";
+    private const string WindSweetSpotBandObjectName = "WindSweetSpotBand";
+    private const float WindButtonSize = 136f;
+    private const float WindAssistRootSize = 190f;
+    private const float WindAssistHorizontalOffset = 0f;
+    private const float WindHoldSuppressVomitThreshold = 0.18f;
+    private const float BreachGraceFloor = 0.001f;
+    private const float WarningBadgeThresholdPercent = 35f;
+    private const float RedWarningThresholdPercent = 15f;
     private static readonly Vector2 QteButtonSize = new Vector2(QteButtonIconSize, QteButtonIconSize);
     private static readonly Vector2 QteButtonCenter = new Vector2(0.5f, 0.5f);
     private static readonly Color QteButtonNormalColor = Color.white;
     private static readonly Color QteButtonHighlightColor = new Color(0.85f, 0.95f, 1f, 1f);
     private static readonly Color QteButtonPressedColor = new Color(0.65f, 0.82f, 0.95f, 1f);
     private static readonly Color QteButtonDisabledColor = new Color(0.45f, 0.48f, 0.52f, 0.85f);
+    private static readonly Color WindButtonNormalColor = new Color(0.015f, 0.16f, 0.2f, 0.92f);
+    private static readonly Color WindButtonLockedColor = new Color(0.16f, 0.17f, 0.2f, 0.92f);
+    private static readonly Color WindProgressColor = new Color(0.1f, 0.9f, 1f, 1f);
+    private static readonly Color WindSweetSpotColor = new Color(1f, 0.72f, 0.15f, 0.9f);
     private static Sprite vomitButtonIconSprite;
     private static Sprite barrierGaugeSprite;
+    private static Sprite windButtonCircleSprite;
+    private static Sprite windRingSprite;
 
     [SerializeField] private Image barrierGaugeImage;
     [SerializeField] private TextMeshProUGUI barrierTitleLabel;
     [SerializeField] private TextMeshProUGUI barrierPercentLabel;
     [SerializeField] private Image breachOverlay;
     [SerializeField] private TextMeshProUGUI breachWarningText;
+
+    [Header("Digestive Barrier Assist")]
+    [SerializeField] private bool useLegacyDigestiveAssist = false;
+    [SerializeField, Min(0f)] private float barrierWindRate = 12f;
+    [SerializeField, Range(0f, 1f)] private float respiratoryQteDecayMultiplier = 0.5f;
+    [SerializeField, Min(0f)] private float breachGracePeriod = 2f;
+    [SerializeField] private KeyCode windKey = KeyCode.Space;
+    [SerializeField] private bool enableSweetSpotBand;
+    [SerializeField, Range(0f, 100f)] private float sweetSpotStartPercent = 70f;
+    [SerializeField, Range(0f, 100f)] private float sweetSpotEndPercent = 85f;
+    [SerializeField] private AudioClip barrierWarningTune;
+    [SerializeField, Min(1f)] private float warningTuneMaximumPitch = 1.75f;
+
     private static Sprite breachOverlaySprite;
 
     private static readonly string[] DefaultPathwayObjectPaths =
@@ -79,6 +113,19 @@ public sealed class DigestiveSystemController : MonoBehaviour
     private RoutineSystem routineSystem;
     private Button eatButton;
     private Button vomitButton;
+    private Button windButton;
+    private Image windButtonBackground;
+    private Image windProgressImage;
+    private Image windSweetSpotImage;
+    private TextMeshProUGUI windButtonLabel;
+    private TextMeshProUGUI windLockedTooltip;
+    private AudioSource barrierWarningAudioSource;
+    private bool barrierWarningTunePaused;
+    private bool windPointerHeld;
+    private bool suppressVomitClickAfterWind;
+    private float windPointerHeldDuration;
+    private float breachGraceRemaining = -1f;
+    private readonly HashSet<LungInfectionResponse> activeRespiratoryRepairs = new HashSet<LungInfectionResponse>();
     private TextMeshProUGUI eatLabel;
     private TextMeshProUGUI vomitLabel;
     private TextMeshProUGUI vomitSleepingLabel;
@@ -111,6 +158,7 @@ public sealed class DigestiveSystemController : MonoBehaviour
     {
         RoutineSystem.OnRoutineActivityChanged += HandleRoutineActivityChanged;
         RandomEventSystem.OnRandomEventTriggered += HandleRandomEventTriggered;
+        LungInfectionResponse.RepairQTEStateChanged += HandleRespiratoryRepairQteStateChanged;
     }
 
     private void Start()
@@ -134,6 +182,7 @@ public sealed class DigestiveSystemController : MonoBehaviour
         {
             CenterOrdersContainer(ordersContainer.GetComponent<RectTransform>());
             InitializeBarrierGauge(ordersContainer.GetComponent<RectTransform>());
+            InitializeWindAssist(ordersContainer.GetComponent<RectTransform>());
             Transform eatTransform = ordersContainer.transform.Find("EatButton");
             Transform vomitTransform = ordersContainer.transform.Find("VomitButton");
             if (eatTransform != null)
@@ -150,6 +199,7 @@ public sealed class DigestiveSystemController : MonoBehaviour
                 CenterQteButton(vomitButton);
                 ConfigureVomitButtonIcon();
                 CreateVomitSleepingLabel();
+                EmbedVomitButtonInsideWindButton();
             }
         }
 
@@ -157,7 +207,7 @@ public sealed class DigestiveSystemController : MonoBehaviour
             eatButton.gameObject.SetActive(false);
 
         if (vomitButton != null)
-            vomitButton.onClick.AddListener(HandleVomitPressed);
+            vomitButton.onClick.AddListener(HandleEmbeddedVomitPressed);
         else
             Debug.LogError("DigestiveOrdersContainer is missing its VomitButton.", this);
 
@@ -168,7 +218,9 @@ public sealed class DigestiveSystemController : MonoBehaviour
         if (dayCounter == null)
             Debug.LogError("DigestiveSystemController could not find the DayCounterUI.", this);
 
+        RefreshActiveRespiratoryRepairs();
         RefreshButtonStates();
+        RefreshWindAssistUI();
     }
 
     private void InitializeBarrierHealth()
@@ -225,6 +277,447 @@ public sealed class DigestiveSystemController : MonoBehaviour
         barrierPercentLabel.gameObject.SetActive(false);
 
         RefreshBarrierGauge();
+    }
+
+    private void InitializeWindAssist(RectTransform panelRect)
+    {
+        if (panelRect == null)
+            return;
+
+        Transform existingRoot = panelRect.Find(WindAssistRootObjectName);
+        if (existingRoot != null)
+            return;
+
+        GameObject rootObject = new GameObject(WindAssistRootObjectName, typeof(RectTransform));
+        rootObject.transform.SetParent(panelRect, false);
+        RectTransform rootRect = rootObject.GetComponent<RectTransform>();
+        rootRect.anchorMin = QteButtonCenter;
+        rootRect.anchorMax = QteButtonCenter;
+        rootRect.pivot = QteButtonCenter;
+        rootRect.sizeDelta = new Vector2(WindAssistRootSize, WindAssistRootSize);
+        rootRect.anchoredPosition = new Vector2(WindAssistHorizontalOffset, DigestiveQteVerticalOffset);
+
+        Image ringTrack = CreateWindAssistImage(WindProgressTrackObjectName, rootRect, GetWindRingSprite(), new Color(0.015f, 0.07f, 0.09f, 0.9f));
+        ringTrack.rectTransform.sizeDelta = new Vector2(WindAssistRootSize, WindAssistRootSize);
+
+        if (enableSweetSpotBand)
+        {
+            Sprite sweetSpotSprite = CreateWindAssistSprite("Digestive Wind Sweet Spot", true,
+                sweetSpotStartPercent, sweetSpotEndPercent);
+            windSweetSpotImage = CreateWindAssistImage(WindSweetSpotBandObjectName, rootRect, sweetSpotSprite, WindSweetSpotColor);
+            windSweetSpotImage.rectTransform.sizeDelta = new Vector2(WindAssistRootSize, WindAssistRootSize);
+        }
+
+        windProgressImage = CreateWindAssistImage(WindProgressFillObjectName, rootRect, GetWindRingSprite(), WindProgressColor);
+        windProgressImage.rectTransform.sizeDelta = new Vector2(WindAssistRootSize, WindAssistRootSize);
+        windProgressImage.type = Image.Type.Filled;
+        windProgressImage.fillMethod = Image.FillMethod.Radial360;
+        windProgressImage.fillOrigin = (int)Image.Origin360.Top;
+        windProgressImage.fillClockwise = true;
+        windProgressImage.fillAmount = 1f;
+
+        GameObject buttonObject = new GameObject(WindButtonObjectName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button), typeof(EventTrigger));
+        buttonObject.transform.SetParent(rootRect, false);
+        RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
+        buttonRect.anchorMin = QteButtonCenter;
+        buttonRect.anchorMax = QteButtonCenter;
+        buttonRect.pivot = QteButtonCenter;
+        buttonRect.sizeDelta = new Vector2(WindButtonSize, WindButtonSize);
+
+        windButtonBackground = buttonObject.GetComponent<Image>();
+        windButtonBackground.sprite = GetWindButtonCircleSprite();
+        windButtonBackground.color = WindButtonNormalColor;
+        windButtonBackground.raycastTarget = true;
+
+        windButton = buttonObject.GetComponent<Button>();
+        windButton.targetGraphic = windButtonBackground;
+        windButton.transition = Selectable.Transition.ColorTint;
+        windButton.colors = CreateWindAssistButtonColors();
+
+        EventTrigger pointerEvents = buttonObject.GetComponent<EventTrigger>();
+        pointerEvents.triggers = new List<EventTrigger.Entry>();
+        AddWindPointerEvent(pointerEvents, EventTriggerType.PointerDown, HandleWindPointerDown);
+        AddWindPointerEvent(pointerEvents, EventTriggerType.PointerUp, HandleWindPointerReleased);
+        AddWindPointerEvent(pointerEvents, EventTriggerType.PointerExit, HandleWindPointerReleased);
+
+        windButtonLabel = CreateWindAssistLabel(WindButtonLabelObjectName, buttonRect);
+        RectTransform windLabelRect = windButtonLabel.rectTransform;
+        windLabelRect.sizeDelta = new Vector2(WindButtonSize - 14f, 28f);
+        windLabelRect.anchoredPosition = new Vector2(0f, -42f);
+        windButtonLabel.fontSize = 10f;
+        windLockedTooltip = CreateWindLockedTooltip(rootRect);
+
+        if (barrierWarningTune != null)
+        {
+            barrierWarningAudioSource = GetComponent<AudioSource>();
+            if (barrierWarningAudioSource == null)
+                barrierWarningAudioSource = gameObject.AddComponent<AudioSource>();
+            barrierWarningAudioSource.clip = barrierWarningTune;
+            barrierWarningAudioSource.playOnAwake = false;
+            barrierWarningAudioSource.loop = true;
+            barrierWarningAudioSource.spatialBlend = 0f;
+            barrierWarningAudioSource.volume = 0.45f;
+        }
+    }
+
+    private void EmbedVomitButtonInsideWindButton()
+    {
+        if (vomitButton == null || windButton == null)
+            return;
+
+        RectTransform vomitRect = vomitButton.GetComponent<RectTransform>();
+        if (vomitRect == null)
+            return;
+
+        vomitRect.SetParent(windButton.transform, false);
+        vomitRect.anchorMin = QteButtonCenter;
+        vomitRect.anchorMax = QteButtonCenter;
+        vomitRect.pivot = QteButtonCenter;
+        vomitRect.sizeDelta = new Vector2(62f, 62f);
+        vomitRect.anchoredPosition = new Vector2(0f, 13f);
+        vomitRect.localScale = Vector3.one;
+
+        EventTrigger pointerEvents = vomitButton.GetComponent<EventTrigger>();
+        if (pointerEvents == null)
+            pointerEvents = vomitButton.gameObject.AddComponent<EventTrigger>();
+        pointerEvents.triggers = new List<EventTrigger.Entry>();
+        AddWindPointerEvent(pointerEvents, EventTriggerType.PointerDown, HandleWindPointerDown);
+        AddWindPointerEvent(pointerEvents, EventTriggerType.PointerUp, HandleWindPointerReleased);
+        AddWindPointerEvent(pointerEvents, EventTriggerType.PointerExit, HandleWindPointerReleased);
+
+        if (vomitSleepingLabel != null)
+        {
+            RectTransform sleepingRect = vomitSleepingLabel.rectTransform;
+            sleepingRect.anchorMin = new Vector2(0.5f, 0f);
+            sleepingRect.anchorMax = new Vector2(0.5f, 0f);
+            sleepingRect.pivot = new Vector2(0.5f, 1f);
+            sleepingRect.anchoredPosition = new Vector2(0f, -2f);
+            sleepingRect.sizeDelta = new Vector2(88f, 18f);
+            vomitSleepingLabel.fontSize = 8f;
+        }
+    }
+
+    private static Image CreateWindAssistImage(string objectName, RectTransform parent, Sprite sprite, Color color)
+    {
+        GameObject imageObject = new GameObject(objectName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        imageObject.transform.SetParent(parent, false);
+        RectTransform imageRect = imageObject.GetComponent<RectTransform>();
+        imageRect.anchorMin = QteButtonCenter;
+        imageRect.anchorMax = QteButtonCenter;
+        imageRect.pivot = QteButtonCenter;
+        imageRect.sizeDelta = new Vector2(WindAssistRootSize, WindAssistRootSize);
+
+        Image image = imageObject.GetComponent<Image>();
+        image.sprite = sprite;
+        image.color = color;
+        image.raycastTarget = false;
+        image.preserveAspect = true;
+        return image;
+    }
+
+    private TextMeshProUGUI CreateWindAssistLabel(string labelName, RectTransform parent)
+    {
+        GameObject labelObject = new GameObject(labelName, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        labelObject.transform.SetParent(parent, false);
+        RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+        labelRect.anchorMin = QteButtonCenter;
+        labelRect.anchorMax = QteButtonCenter;
+        labelRect.pivot = QteButtonCenter;
+        labelRect.sizeDelta = new Vector2(WindButtonSize - 12f, 58f);
+        labelRect.anchoredPosition = Vector2.zero;
+
+        TextMeshProUGUI label = labelObject.GetComponent<TextMeshProUGUI>();
+        label.font = Resources.Load<TMP_FontAsset>(BreachWarningFontResourcePath) ?? TMP_Settings.defaultFontAsset;
+        label.fontSize = 16f;
+        label.fontStyle = FontStyles.Bold;
+        label.color = Color.white;
+        label.alignment = TextAlignmentOptions.Center;
+        label.textWrappingMode = TextWrappingModes.Normal;
+        label.raycastTarget = false;
+        return label;
+    }
+
+    private TextMeshProUGUI CreateWindLockedTooltip(RectTransform parent)
+    {
+        TextMeshProUGUI tooltip = CreateWindAssistLabel(WindLockedTooltipObjectName, parent);
+        RectTransform tooltipRect = tooltip.rectTransform;
+        tooltipRect.anchoredPosition = new Vector2(0f, WindAssistRootSize * 0.5f + 14f);
+        tooltipRect.sizeDelta = new Vector2(300f, 36f);
+        tooltip.fontSize = 14f;
+        tooltip.color = new Color(1f, 0.84f, 0.35f, 1f);
+        tooltip.text = "Finish the lung repair first";
+        tooltip.gameObject.SetActive(false);
+        return tooltip;
+    }
+
+    private static ColorBlock CreateWindAssistButtonColors()
+    {
+        return new ColorBlock
+        {
+            normalColor = WindButtonNormalColor,
+            highlightedColor = new Color(0.04f, 0.26f, 0.3f, 0.98f),
+            pressedColor = new Color(0.04f, 0.42f, 0.48f, 1f),
+            selectedColor = WindButtonNormalColor,
+            disabledColor = WindButtonLockedColor,
+            colorMultiplier = 1f,
+            fadeDuration = 0.08f
+        };
+    }
+
+    private static void AddWindPointerEvent(EventTrigger trigger, EventTriggerType eventType, System.Action<BaseEventData> callback)
+    {
+        EventTrigger.Entry entry = new EventTrigger.Entry { eventID = eventType };
+        entry.callback.AddListener(data => callback(data));
+        trigger.triggers.Add(entry);
+    }
+
+    private void HandleWindPointerDown(BaseEventData eventData)
+    {
+        if (activeRespiratoryRepairs.Count == 0)
+        {
+            windPointerHeld = true;
+            windPointerHeldDuration = 0f;
+            suppressVomitClickAfterWind = false;
+        }
+    }
+
+    private void HandleWindPointerReleased(BaseEventData eventData)
+    {
+        if (windPointerHeld && windPointerHeldDuration >= WindHoldSuppressVomitThreshold)
+            suppressVomitClickAfterWind = true;
+        windPointerHeld = false;
+    }
+
+    private void HandleEmbeddedVomitPressed()
+    {
+        if (suppressVomitClickAfterWind)
+        {
+            suppressVomitClickAfterWind = false;
+            return;
+        }
+
+        HandleVomitPressed();
+    }
+
+    private static Sprite GetWindRingSprite()
+    {
+        if (windRingSprite == null)
+            windRingSprite = CreateWindAssistSprite("Digestive Barrier Wind Ring", true, 0f, 100f);
+        return windRingSprite;
+    }
+
+    private static Sprite GetWindButtonCircleSprite()
+    {
+        if (windButtonCircleSprite == null)
+            windButtonCircleSprite = CreateWindAssistSprite("Digestive Barrier Wind Button", false, 0f, 100f);
+        return windButtonCircleSprite;
+    }
+
+    private static Sprite CreateWindAssistSprite(string spriteName, bool ring, float startPercent, float endPercent)
+    {
+        const int textureSize = 128;
+        const float innerRadius = 0.72f;
+        const float outerRadius = 0.98f;
+        Color32[] pixels = new Color32[textureSize * textureSize];
+        float center = (textureSize - 1) * 0.5f;
+        float radius = textureSize * 0.5f;
+        float clampedStart = Mathf.Clamp01(startPercent / 100f);
+        float clampedEnd = Mathf.Clamp01(endPercent / 100f);
+
+        for (int y = 0; y < textureSize; y++)
+        {
+            for (int x = 0; x < textureSize; x++)
+            {
+                float normalizedX = (x - center) / radius;
+                float normalizedY = (y - center) / radius;
+                float radialDistance = Mathf.Sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+                float alpha = ring
+                    ? Mathf.Clamp01(Mathf.Min((radialDistance - innerRadius) * 24f, (outerRadius - radialDistance) * 24f))
+                    : Mathf.Clamp01((1f - radialDistance) * 24f);
+
+                if (ring && alpha > 0f && (clampedStart > 0f || clampedEnd < 1f))
+                {
+                    float angle = Mathf.Repeat(Mathf.Atan2(normalizedX, normalizedY) / (Mathf.PI * 2f), 1f);
+                    bool inBand = clampedStart <= clampedEnd
+                        ? angle >= clampedStart && angle <= clampedEnd
+                        : angle >= clampedStart || angle <= clampedEnd;
+                    if (!inBand)
+                        alpha = 0f;
+                }
+
+                pixels[y * textureSize + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(alpha * 255f));
+            }
+        }
+
+        Texture2D texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false);
+        texture.name = spriteName + " Texture";
+        texture.filterMode = FilterMode.Bilinear;
+        texture.wrapMode = TextureWrapMode.Clamp;
+        texture.SetPixels32(pixels);
+        texture.Apply(false, true);
+        Sprite sprite = Sprite.Create(texture, new Rect(0f, 0f, textureSize, textureSize), QteButtonCenter, 100f);
+        sprite.name = spriteName;
+        return sprite;
+    }
+
+    private void UpdateDigestiveBarrier(float gameplayDelta)
+    {
+        if (barrierHealth == null)
+            return;
+
+        bool respiratoryRepairActive = activeRespiratoryRepairs.Count > 0;
+        if (windPointerHeld && gameplayDelta > 0f)
+            windPointerHeldDuration += gameplayDelta;
+        bool windRequested = windPointerHeld || (windKey != KeyCode.None && Input.GetKey(windKey));
+        if (gameplayDelta > 0f)
+        {
+            if (windRequested && !respiratoryRepairActive)
+            {
+                float currentBarrier = barrierHealth.CurrentBarrier;
+                barrierHealth.RestoreBarrier(Mathf.Max(0f, barrierWindRate) * gameplayDelta);
+                if (barrierHealth.CurrentBarrier > currentBarrier)
+                    breachGraceRemaining = -1f;
+            }
+            else
+            {
+                DifficultyStats difficultyStats = DifficultySettings.CurrentStats;
+                float decayRate = difficultyStats != null ? Mathf.Max(0f, difficultyStats.digestiveBarrierDecayPerSecond) : 1.6f;
+                float qteDecayScale = respiratoryRepairActive ? Mathf.Clamp01(respiratoryQteDecayMultiplier) : 1f;
+                ApplyDigestiveBarrierLoss(decayRate * qteDecayScale * gameplayDelta);
+            }
+
+            if (barrierHealth.CurrentBarrier <= BreachGraceFloor)
+            {
+                if (breachGraceRemaining < 0f)
+                    breachGraceRemaining = Mathf.Max(0f, breachGracePeriod);
+                breachGraceRemaining = Mathf.Max(0f, breachGraceRemaining - gameplayDelta);
+                if (breachGraceRemaining <= 0f)
+                {
+                    breachGraceRemaining = -1f;
+                    barrierHealth.TakeDamage(BarrierMaximum);
+                }
+            }
+            else
+            {
+                breachGraceRemaining = -1f;
+            }
+        }
+    }
+
+    private void ApplyDigestiveBarrierDamage(float requestedDamage)
+    {
+        DifficultyStats difficultyStats = DifficultySettings.CurrentStats;
+        float damageMultiplier = difficultyStats != null ? Mathf.Max(0f, difficultyStats.barrierDamageMultiplier) : 1f;
+        ApplyDigestiveBarrierLoss(Mathf.Max(0f, requestedDamage) * damageMultiplier);
+    }
+
+    private void ApplyDigestiveBarrierLoss(float requestedLoss)
+    {
+        if (requestedLoss <= 0f || barrierHealth == null || barrierHealth.CurrentBarrier <= BreachGraceFloor)
+            return;
+
+        float damageMultiplier = DifficultySettings.CurrentStats != null
+            ? Mathf.Max(0f, DifficultySettings.CurrentStats.barrierDamageMultiplier)
+            : 1f;
+        if (damageMultiplier <= 0f)
+            return;
+
+        float safeLoss = Mathf.Min(requestedLoss, Mathf.Max(0f, barrierHealth.CurrentBarrier - BreachGraceFloor));
+        if (safeLoss > 0f)
+            barrierHealth.TakeDamage(safeLoss / damageMultiplier);
+    }
+
+    private void RefreshWindAssistUI()
+    {
+        float barrierValue = barrierHealth != null ? Mathf.Clamp(barrierHealth.CurrentBarrier, 0f, BarrierMaximum) : BarrierMaximum;
+        float barrierPercent = barrierValue / BarrierMaximum * 100f;
+        bool respiratoryRepairActive = activeRespiratoryRepairs.Count > 0;
+        bool locked = respiratoryRepairActive;
+
+        if (windProgressImage != null)
+            windProgressImage.fillAmount = barrierValue / BarrierMaximum;
+        if (windSweetSpotImage != null)
+            windSweetSpotImage.enabled = enableSweetSpotBand;
+        if (windButton != null)
+            windButton.interactable = !locked;
+        if (windButtonBackground != null)
+            windButtonBackground.color = locked ? WindButtonLockedColor : WindButtonNormalColor;
+        if (windButtonLabel != null)
+        {
+            windButtonLabel.text = locked ? "LOCKED" : Application.isMobilePlatform
+                ? "TAP + HOLD"
+                : $"CLICK + HOLD\n{windKey.ToString().ToUpperInvariant()}";
+            windButtonLabel.color = locked ? new Color(0.76f, 0.78f, 0.82f, 1f) : Color.white;
+        }
+        if (windLockedTooltip != null)
+            windLockedTooltip.gameObject.SetActive(locked);
+
+        LayerSelectionHUD.SetDigestiveBarrierWarning(barrierPercent);
+        RefreshBarrierWarningTune(barrierPercent);
+    }
+
+    private void RefreshBarrierWarningTune(float barrierPercent)
+    {
+        if (barrierWarningAudioSource == null)
+            return;
+
+        bool shouldPlay = barrierWarningTune != null && barrierPercent <= WarningBadgeThresholdPercent;
+        if (!shouldPlay)
+        {
+            if (barrierWarningAudioSource.isPlaying || barrierWarningTunePaused)
+                barrierWarningAudioSource.Stop();
+            barrierWarningTunePaused = false;
+            return;
+        }
+
+        float urgency = Mathf.Clamp01((WarningBadgeThresholdPercent - barrierPercent) / WarningBadgeThresholdPercent);
+        barrierWarningAudioSource.pitch = Mathf.Lerp(1f, Mathf.Max(1f, warningTuneMaximumPitch), urgency);
+        if (Time.timeScale <= 0f)
+        {
+            if (barrierWarningAudioSource.isPlaying)
+                barrierWarningAudioSource.Pause();
+            barrierWarningTunePaused = true;
+            return;
+        }
+
+        if (barrierWarningTunePaused)
+        {
+            barrierWarningAudioSource.UnPause();
+            barrierWarningTunePaused = false;
+        }
+        else if (!barrierWarningAudioSource.isPlaying)
+        {
+            barrierWarningAudioSource.Play();
+        }
+    }
+
+    private void HandleRespiratoryRepairQteStateChanged(LungInfectionResponse response, bool isActive)
+    {
+        if (response == null)
+            return;
+
+        if (isActive)
+        {
+            activeRespiratoryRepairs.Add(response);
+            windPointerHeld = false;
+        }
+        else
+        {
+            activeRespiratoryRepairs.Remove(response);
+        }
+
+        RefreshWindAssistUI();
+    }
+
+    private void RefreshActiveRespiratoryRepairs()
+    {
+        activeRespiratoryRepairs.Clear();
+        LungInfectionResponse[] responses = FindObjectsByType<LungInfectionResponse>(FindObjectsSortMode.None);
+        for (int index = 0; index < responses.Length; index++)
+        {
+            if (responses[index] != null && responses[index].IsResponseInProgress)
+                activeRespiratoryRepairs.Add(responses[index]);
+        }
     }
 
     private static TextMeshProUGUI FindOrCreateGaugeLabel(Transform parent, string labelName, string initialText, float verticalPosition, float fontSize)
@@ -596,6 +1089,11 @@ public sealed class DigestiveSystemController : MonoBehaviour
     {
         RoutineSystem.OnRoutineActivityChanged -= HandleRoutineActivityChanged;
         RandomEventSystem.OnRandomEventTriggered -= HandleRandomEventTriggered;
+        LungInfectionResponse.RepairQTEStateChanged -= HandleRespiratoryRepairQteStateChanged;
+        windPointerHeld = false;
+        if (barrierWarningAudioSource != null && barrierWarningAudioSource.isPlaying)
+            barrierWarningAudioSource.Stop();
+        barrierWarningTunePaused = false;
     }
 
     private void OnDestroy()
@@ -603,7 +1101,7 @@ public sealed class DigestiveSystemController : MonoBehaviour
         if (eatButton != null)
             eatButton.onClick.RemoveListener(HandleEatPressed);
         if (vomitButton != null)
-            vomitButton.onClick.RemoveListener(HandleVomitPressed);
+            vomitButton.onClick.RemoveListener(HandleEmbeddedVomitPressed);
     }
 
     private void Update()
@@ -612,11 +1110,13 @@ public sealed class DigestiveSystemController : MonoBehaviour
             routineSystem = RoutineSystem.Instance;
 
         float gameplayDelta = GameplaySpeed.DeltaTime;
+        UpdateDigestiveBarrier(gameplayDelta);
         eatCooldownRemaining = Mathf.Max(0f, eatCooldownRemaining - gameplayDelta);
         vomitCooldownRemaining = Mathf.Max(0f, vomitCooldownRemaining - gameplayDelta);
         RefreshButtonStates();
         RefreshBarrierGauge();
         RefreshBreachVisuals();
+        RefreshWindAssistUI();
     }
 
     private void HandleRoutineActivityChanged(RoutineActivity activity)
@@ -665,7 +1165,7 @@ public sealed class DigestiveSystemController : MonoBehaviour
 
     private void HandleContaminatedFoodEvent(RandomEventData eventData)
     {
-        barrierHealth?.TakeDamage(BarrierDamagePerRandomEvent);
+        ApplyDigestiveBarrierDamage(BarrierDamagePerRandomEvent);
         lastContaminatedFoodEventDay = eventData.day;
         lastContaminatedFoodEventHour = eventData.hour;
         string eventId = eventData.eventName == ExpiredFoodEventName
@@ -689,7 +1189,7 @@ public sealed class DigestiveSystemController : MonoBehaviour
 
     private void HandleContaminatedWaterEvent(RandomEventData eventData)
     {
-        barrierHealth?.TakeDamage(BarrierDamagePerRandomEvent);
+        ApplyDigestiveBarrierDamage(BarrierDamagePerRandomEvent);
         lastContaminatedWaterEventDay = eventData.day;
         lastContaminatedWaterEventHour = eventData.hour;
         string eventKey = WellnessManager.BuildEventKey("ContaminatedWater", eventData.day, eventData.hour);
@@ -722,7 +1222,8 @@ public sealed class DigestiveSystemController : MonoBehaviour
             return;
 
         eatCooldownRemaining = ManualCooldownSeconds;
-        barrierHealth?.RestoreBarrier(BarrierRestorePerAction);
+        if (useLegacyDigestiveAssist)
+            barrierHealth?.RestoreBarrier(BarrierRestorePerAction);
         QueueBatch(foodPrefab, false, false, dayCounter != null ? dayCounter.CurrentDay : -1,
             dayCounter != null ? dayCounter.CurrentHour : -1);
         RefreshButtonStates();
@@ -734,7 +1235,8 @@ public sealed class DigestiveSystemController : MonoBehaviour
             return;
 
         vomitCooldownRemaining = ManualCooldownSeconds;
-        barrierHealth?.RestoreBarrier(BarrierRestorePerAction);
+        if (useLegacyDigestiveAssist)
+            barrierHealth?.RestoreBarrier(BarrierRestorePerAction);
         isBarrierRepairing = barrierHealth != null && barrierHealth.CurrentBarrier > 0f && barrierHealth.CurrentBarrier < BarrierMaximum;
         RefreshBreachVisuals();
         HashSet<string> eventKeys = FindActiveContaminationEventKeys();

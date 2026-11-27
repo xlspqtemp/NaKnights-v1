@@ -22,6 +22,11 @@ internal static class LayerSelectionHUD
     private const string BankGothicResourcePath = "BankGothicMediumSDF";
     private const float LayerToggleHeight = 36f;
     private const float LayerToggleGap = 8f;
+    private const float DigestiveBarrierWarningThreshold = 35f;
+    private const float DigestiveBarrierCriticalThreshold = 15f;
+    private const float DigestiveBarrierWarningPulseSpeed = 5f;
+    private const float DigestiveBarrierWarningBadgeSize = 18f;
+    private const float DigestiveBarrierWarningBadgeRightOffset = -104f;
 
     private static readonly int[] LayerNumbers = { 4, 3, 2, 1 };
     private static readonly Color NormalButtonColor = new Color(0.035f, 0.065f, 0.085f, 0.96f);
@@ -38,6 +43,10 @@ internal static class LayerSelectionHUD
     private static TextMeshProUGUI[] layerButtonLabels;
     private static TextMeshProUGUI selectedLayerArrow;
     private static TextMeshProUGUI[] layerButtonQteLabels;
+    private static Image digestiveBarrierWarningBadge;
+    private static RectTransform digestiveBarrierWarningBadgeRect;
+    private static Sprite digestiveBarrierWarningBadgeSprite;
+    private static float digestiveBarrierPercent = 100f;
     private static Image[] layerButtonInfoBackgrounds;
     private static Outline[] layerButtonOutlines;
     private static RectTransform layerRowsRoot;
@@ -64,6 +73,9 @@ internal static class LayerSelectionHUD
         layerButtonLabels = null;
         selectedLayerArrow = null;
         layerButtonQteLabels = null;
+        digestiveBarrierWarningBadge = null;
+        digestiveBarrierWarningBadgeRect = null;
+        digestiveBarrierPercent = 100f;
         layerButtonInfoBackgrounds = null;
         layerButtonOutlines = null;
         layerRowsRoot = null;
@@ -244,6 +256,8 @@ internal static class LayerSelectionHUD
             layerButtons[index] = layerButton;
             layerButtonBackgrounds[index] = layerBackground;
             layerButtonOutlines[index] = layerOutline;
+            if (layerNumbers[index] == 3)
+                CreateDigestiveBarrierWarningBadge(layerButton);
         }
 
         RectTransform initialArrowRow = layerButtons[0].transform.parent as RectTransform;
@@ -283,6 +297,99 @@ internal static class LayerSelectionHUD
         button.transition = Selectable.Transition.ColorTint;
         button.colors = CreateButtonColors(NormalButtonColor);
         return button;
+    }
+
+    private static void CreateDigestiveBarrierWarningBadge(Button digestiveButton)
+    {
+        if (digestiveButton == null)
+            return;
+
+        GameObject badgeObject = new GameObject("DigestiveBarrierWarningBadge", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        badgeObject.transform.SetParent(digestiveButton.transform, false);
+        digestiveBarrierWarningBadgeRect = badgeObject.GetComponent<RectTransform>();
+        digestiveBarrierWarningBadgeRect.anchorMin = new Vector2(1f, 0.5f);
+        digestiveBarrierWarningBadgeRect.anchorMax = new Vector2(1f, 0.5f);
+        digestiveBarrierWarningBadgeRect.pivot = new Vector2(0.5f, 0.5f);
+        digestiveBarrierWarningBadgeRect.sizeDelta = new Vector2(DigestiveBarrierWarningBadgeSize, DigestiveBarrierWarningBadgeSize);
+        digestiveBarrierWarningBadgeRect.anchoredPosition = new Vector2(DigestiveBarrierWarningBadgeRightOffset, 0f);
+        digestiveBarrierWarningBadgeRect.localScale = Vector3.one;
+
+        digestiveBarrierWarningBadge = badgeObject.GetComponent<Image>();
+        digestiveBarrierWarningBadge.sprite = GetDigestiveBarrierWarningBadgeSprite();
+        digestiveBarrierWarningBadge.type = Image.Type.Simple;
+        digestiveBarrierWarningBadge.color = new Color(1f, 0.58f, 0.08f, 1f);
+        digestiveBarrierWarningBadge.raycastTarget = false;
+
+        GameObject markObject = new GameObject("WarningMark", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        markObject.transform.SetParent(badgeObject.transform, false);
+        RectTransform markRect = markObject.GetComponent<RectTransform>();
+        markRect.anchorMin = Vector2.zero;
+        markRect.anchorMax = Vector2.one;
+        markRect.offsetMin = Vector2.zero;
+        markRect.offsetMax = Vector2.zero;
+        TextMeshProUGUI mark = markObject.GetComponent<TextMeshProUGUI>();
+        mark.font = TMP_Settings.defaultFontAsset;
+        mark.fontSize = 12f;
+        mark.fontStyle = FontStyles.Bold;
+        mark.color = Color.white;
+        mark.alignment = TextAlignmentOptions.Center;
+        mark.text = "!";
+        mark.raycastTarget = false;
+
+        UpdateDigestiveBarrierWarningBadge(Time.unscaledTime);
+    }
+
+    private static Sprite GetDigestiveBarrierWarningBadgeSprite()
+    {
+        if (digestiveBarrierWarningBadgeSprite != null)
+            return digestiveBarrierWarningBadgeSprite;
+
+        const int textureSize = 64;
+        Color32[] pixels = new Color32[textureSize * textureSize];
+        float center = (textureSize - 1) * 0.5f;
+        float radius = textureSize * 0.5f;
+        for (int y = 0; y < textureSize; y++)
+        {
+            for (int x = 0; x < textureSize; x++)
+            {
+                float normalizedX = (x - center) / radius;
+                float normalizedY = (y - center) / radius;
+                float distance = Mathf.Sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
+                byte alpha = (byte)Mathf.RoundToInt(Mathf.Clamp01((1f - distance) * 24f) * 255f);
+                pixels[y * textureSize + x] = new Color32(255, 255, 255, alpha);
+            }
+        }
+
+        Texture2D texture = new Texture2D(textureSize, textureSize, TextureFormat.RGBA32, false);
+        texture.name = "Digestive Barrier Warning Badge Texture";
+        texture.filterMode = FilterMode.Bilinear;
+        texture.wrapMode = TextureWrapMode.Clamp;
+        texture.SetPixels32(pixels);
+        texture.Apply(false, true);
+        digestiveBarrierWarningBadgeSprite = Sprite.Create(texture,
+            new Rect(0f, 0f, textureSize, textureSize), new Vector2(0.5f, 0.5f), 100f);
+        digestiveBarrierWarningBadgeSprite.name = "Digestive Barrier Warning Badge";
+        return digestiveBarrierWarningBadgeSprite;
+    }
+
+    private static void UpdateDigestiveBarrierWarningBadge(float unscaledTime)
+    {
+        if (digestiveBarrierWarningBadge == null || digestiveBarrierWarningBadgeRect == null)
+            return;
+
+        bool isVisible = !float.IsNaN(digestiveBarrierPercent) && digestiveBarrierPercent <= DigestiveBarrierWarningThreshold;
+        if (digestiveBarrierWarningBadge.gameObject.activeSelf != isVisible)
+            digestiveBarrierWarningBadge.gameObject.SetActive(isVisible);
+        if (!isVisible)
+            return;
+
+        bool isCritical = digestiveBarrierPercent <= DigestiveBarrierCriticalThreshold;
+        Color pulseColor = isCritical ? new Color(1f, 0.12f, 0.1f, 1f) : new Color(1f, 0.58f, 0.08f, 1f);
+        float pulse = (Mathf.Sin(unscaledTime * DigestiveBarrierWarningPulseSpeed) + 1f) * 0.5f;
+        pulseColor.a = Mathf.Lerp(0.72f, 1f, pulse);
+        digestiveBarrierWarningBadge.color = pulseColor;
+        float scale = Mathf.Lerp(0.88f, 1.12f, pulse);
+        digestiveBarrierWarningBadgeRect.localScale = new Vector3(scale, scale, 1f);
     }
 
     private static ColorBlock CreateButtonColors(Color baseColor)
@@ -463,9 +570,17 @@ internal static class LayerSelectionHUD
         RefreshLayerButtonVisuals(Time.unscaledTime);
     }
 
+    /// <summary>Updates the Digestive layer badge from the current barrier percentage.</summary>
+    internal static void SetDigestiveBarrierWarning(float percent)
+    {
+        digestiveBarrierPercent = percent;
+        UpdateDigestiveBarrierWarningBadge(Time.unscaledTime);
+    }
+
     internal static void UpdateThreatGlow(float unscaledTime)
     {
         RefreshLayerButtonVisuals(unscaledTime);
+        UpdateDigestiveBarrierWarningBadge(unscaledTime);
     }
 
     private static void RefreshLayerButtonVisuals(float unscaledTime)

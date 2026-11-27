@@ -27,6 +27,7 @@ public sealed class DifficultyStats
     [Range(0f, 100f)] public float veryRarePathogenWeightPercent;
     [Range(0f, 100f)] public float namedInfectionChance;
     [Min(0f)] public float barrierDamageMultiplier = 1f;
+    [Min(0f)] public float digestiveBarrierDecayPerSecond = 1.6f;
     [Min(1f)] public float innateVariantSpecialistDamageMultiplier = 3f;
 
     public DifficultyStats()
@@ -92,6 +93,7 @@ public static class DifficultySettings
     private const float DefaultInnateVariantSpecialistDamageMultiplier = 3f;
     private static readonly float[] DefaultNamedInfectionChances = { 20f, 40f, 50f, 60f };
     private static readonly float[] DefaultBarrierDamageMultipliers = { 0.5f, 1f, 1.5f, 2f };
+    private static readonly float[] DefaultDigestiveBarrierDecayRates = { 1.2f, 1.6f, 2f, 2.4f };
     private static readonly float[][] DefaultPathogenTierWeights =
     {
         new[] { 80f, 20f, 0f, 0f },
@@ -225,6 +227,8 @@ public static class DifficultySettings
             preset.rarePathogenWeightPercent = tierWeights[2];
             preset.veryRarePathogenWeightPercent = tierWeights[3];
             preset.barrierDamageMultiplier = DefaultBarrierDamageMultipliers[index];
+            if (preset.digestiveBarrierDecayPerSecond <= 0f)
+                preset.digestiveBarrierDecayPerSecond = DefaultDigestiveBarrierDecayRates[index];
             if (preset.innateVariantSpecialistDamageMultiplier <= 0f)
                 preset.innateVariantSpecialistDamageMultiplier = DefaultInnateVariantSpecialistDamageMultiplier;
             if (index == HardDifficultyIndex)
@@ -250,10 +254,10 @@ public static class DifficultySettings
     {
         return new[]
         {
-            new DifficultyStats("Easy", 2, 150f, 15f, 80f, 100f, 3f, 3f, 1f, 1f, 0.5f) { maxActiveSquads = 3, startingSupply = 100, maxSupply = 100, deployCost = 15, regenSecondsPerPoint = 2.0f, commonPathogenWeightPercent = 80f, uncommonPathogenWeightPercent = 20f, rarePathogenWeightPercent = 0f, veryRarePathogenWeightPercent = 0f, namedInfectionChance = 20f, barrierDamageMultiplier = 0.5f },
-            new DifficultyStats("Normal", 3, 100f, 10f, 90f, 100f, 5f, 4f, 1f, 1f, 0.5f) { maxActiveSquads = 2, startingSupply = 100, maxSupply = 100, deployCost = 20, regenSecondsPerPoint = 3.0f, commonPathogenWeightPercent = 55f, uncommonPathogenWeightPercent = 35f, rarePathogenWeightPercent = 10f, veryRarePathogenWeightPercent = 0f, namedInfectionChance = 40f, barrierDamageMultiplier = 1f },
-            new DifficultyStats("Medium", 5, 100f, 10f, 120f, 150f, 6f, 5f, 1f, 1f, 0.5f) { maxActiveSquads = 2, startingSupply = 100, maxSupply = 100, deployCost = 25, regenSecondsPerPoint = 4.0f, commonPathogenWeightPercent = 20f, uncommonPathogenWeightPercent = 30f, rarePathogenWeightPercent = 30f, veryRarePathogenWeightPercent = 20f, namedInfectionChance = 50f, barrierDamageMultiplier = 1.5f },
-            new DifficultyStats("Hard", 5, 80f, 8f, 130f, 170f, 7f, 6f, 1f, 1f, 0.5f) { maxActiveSquads = 2, startingSupply = 100, maxSupply = 100, deployCost = 30, regenSecondsPerPoint = 5.0f, commonPathogenWeightPercent = 5f, uncommonPathogenWeightPercent = 5f, rarePathogenWeightPercent = 10f, veryRarePathogenWeightPercent = 80f, namedInfectionChance = 60f, barrierDamageMultiplier = 2f }
+            new DifficultyStats("Easy", 2, 150f, 15f, 80f, 100f, 3f, 3f, 1f, 1f, 0.5f) { maxActiveSquads = 3, startingSupply = 100, maxSupply = 100, deployCost = 15, regenSecondsPerPoint = 2.0f, commonPathogenWeightPercent = 80f, uncommonPathogenWeightPercent = 20f, rarePathogenWeightPercent = 0f, veryRarePathogenWeightPercent = 0f, namedInfectionChance = 20f, barrierDamageMultiplier = 0.5f, digestiveBarrierDecayPerSecond = 1.2f },
+            new DifficultyStats("Normal", 3, 100f, 10f, 90f, 100f, 5f, 4f, 1f, 1f, 0.5f) { maxActiveSquads = 2, startingSupply = 100, maxSupply = 100, deployCost = 20, regenSecondsPerPoint = 3.0f, commonPathogenWeightPercent = 55f, uncommonPathogenWeightPercent = 35f, rarePathogenWeightPercent = 10f, veryRarePathogenWeightPercent = 0f, namedInfectionChance = 40f, barrierDamageMultiplier = 1f, digestiveBarrierDecayPerSecond = 1.6f },
+            new DifficultyStats("Medium", 5, 100f, 10f, 120f, 150f, 6f, 5f, 1f, 1f, 0.5f) { maxActiveSquads = 2, startingSupply = 100, maxSupply = 100, deployCost = 25, regenSecondsPerPoint = 4.0f, commonPathogenWeightPercent = 20f, uncommonPathogenWeightPercent = 30f, rarePathogenWeightPercent = 30f, veryRarePathogenWeightPercent = 20f, namedInfectionChance = 50f, barrierDamageMultiplier = 1.5f, digestiveBarrierDecayPerSecond = 2f },
+            new DifficultyStats("Hard", 5, 80f, 8f, 130f, 170f, 7f, 6f, 1f, 1f, 0.5f) { maxActiveSquads = 2, startingSupply = 100, maxSupply = 100, deployCost = 30, regenSecondsPerPoint = 5.0f, commonPathogenWeightPercent = 5f, uncommonPathogenWeightPercent = 5f, rarePathogenWeightPercent = 10f, veryRarePathogenWeightPercent = 80f, namedInfectionChance = 60f, barrierDamageMultiplier = 2f, digestiveBarrierDecayPerSecond = 2.4f }
         };
     }
 

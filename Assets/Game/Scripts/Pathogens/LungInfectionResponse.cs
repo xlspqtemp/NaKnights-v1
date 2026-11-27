@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
@@ -9,6 +10,9 @@ using UnityEngine.Video;
 /// <summary>Tracks virus infiltrations for one lung and dispatches a timed immune-cell pair.</summary>
 public sealed class LungInfectionResponse : MonoBehaviour
 {
+    /// <summary>Notifies listeners when a lung repair response starts or stops.</summary>
+    public static event Action<LungInfectionResponse, bool> RepairQTEStateChanged;
+
     private const float SecondsPerInfiltration = 10f;
     private const float OxygenBoostDurationSeconds = 15f;
     internal const string OxygenBoostIconObjectName = "Oxygen Boost Perk Timer";
@@ -88,6 +92,12 @@ public sealed class LungInfectionResponse : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (responseInProgress)
+        {
+            responseInProgress = false;
+            RepairQTEStateChanged?.Invoke(this, false);
+        }
+
         if (sendImmuneCellsButton != null)
         {
             sendImmuneCellsButton.onClick.RemoveListener(BeginRepair);
@@ -215,6 +225,7 @@ public sealed class LungInfectionResponse : MonoBehaviour
         }
 
         responseInProgress = true;
+        RepairQTEStateChanged?.Invoke(this, true);
         remainingResponseSeconds = infiltrationCount * SecondsPerInfiltration;
         sendImmuneCellsButton.interactable = false;
         responseRoutine = StartCoroutine(RunImmuneResponse());
@@ -246,6 +257,7 @@ public sealed class LungInfectionResponse : MonoBehaviour
 
         responseRoutine = null;
         responseInProgress = false;
+        RepairQTEStateChanged?.Invoke(this, false);
         infiltrationCount = 0;
         remainingResponseSeconds = 0f;
         bool completedQte = pendingWellnessEventKeys.Count > 0;
