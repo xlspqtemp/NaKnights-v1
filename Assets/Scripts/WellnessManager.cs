@@ -783,6 +783,8 @@ public class WellnessManager : MonoBehaviour
             onGameLost?.Invoke(result);
             ShowOutcome(GameOverMessage, true, "Back to Main Menu");
         }
+
+        RunResultScreen.Show(this, result);
     }
 
     private void CreateOutcomePanel()
