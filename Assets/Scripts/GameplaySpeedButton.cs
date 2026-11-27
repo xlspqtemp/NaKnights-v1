@@ -18,7 +18,6 @@ public sealed class GameplaySpeedButton : MonoBehaviour
     private RectTransform speedButtonRect;
     private readonly Vector3[] dayCounterCorners = new Vector3[4];
     private TextMeshProUGUI speedLabel;
-    private TextMeshProUGUI qteLabel;
 
     private void OnEnable()
     {
@@ -102,8 +101,6 @@ public sealed class GameplaySpeedButton : MonoBehaviour
         CreateFastForwardIcon(speedButtonRect);
         CreateText("SpeedModeLabel", speedButtonRect, "1x", 12f, FontStyles.Bold,
             new Vector2(0f, 0.1f), new Vector2(1f, 0.4f), AccentColor, out speedLabel);
-        CreateText("QTEOverrideLabel", speedButtonRect, string.Empty, 8f, FontStyles.Bold,
-            new Vector2(0f, 0f), new Vector2(1f, 0.16f), AccentColor, out qteLabel);
     }
 
     private void PositionButton()
@@ -179,13 +176,10 @@ public sealed class GameplaySpeedButton : MonoBehaviour
 
     private void RefreshLabel()
     {
-        if (speedLabel == null || qteLabel == null)
+        if (speedLabel == null)
             return;
 
-        float displayedSpeed = GameplaySpeed.Multiplier;
-        speedLabel.text = $"{displayedSpeed:0.#}x";
-        qteLabel.text = GameplaySpeed.IsQTEActive ? "QTE" : string.Empty;
+        speedLabel.text = $"{GameplaySpeed.Multiplier:0.#}x";
         speedLabel.color = AccentColor;
-        qteLabel.color = GameplaySpeed.IsQTEActive ? new Color(1f, 0.55f, 0.3f, 1f) : AccentColor;
     }
 }

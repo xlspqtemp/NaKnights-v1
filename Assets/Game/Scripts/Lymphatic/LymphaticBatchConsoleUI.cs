@@ -45,6 +45,11 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
     private const float RoundedSlotBorderThickness = 4f;
     private const float CommandButtonSize = 64f;
     private const float CommandButtonBottom = 160f;
+    private static readonly Color DisabledActionButtonColor = new Color(0.045f, 0.05f, 0.055f, 1f);
+    private static readonly Color DisabledActionIconColor = new Color(0.36f, 0.39f, 0.42f, 0.72f);
+    private static readonly Color FollowActionIconColor = Color.white;
+    private static readonly Color AbortActionIconColor = new Color(1f, 0.82f, 0.12f, 1f);
+    private static readonly Color DestroyActionIconColor = new Color(1f, 0.18f, 0.16f, 1f);
     private static Sprite solidColorSprite;
     private static Sprite roundedSlotSprite;
     private static Sprite followCommandIconSprite;
@@ -135,6 +140,12 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
     private Button followButton;
     private Button abortButton;
     private Button destroyButton;
+    private Image followButtonBackground;
+    private Image abortButtonBackground;
+    private Image destroyButtonBackground;
+    private Image followButtonIcon;
+    private Image abortButtonIcon;
+    private Image destroyButtonIcon;
     private TextMeshProUGUI followButtonLabel;
     private int selectedBatchId = -1;
     private bool awaitingTargetSelection;
@@ -233,12 +244,18 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
             slots[index] = CreateSlot(index);
 
         followButton = CreateActionButton("Follow", FollowCommandIconResourcePath, panelRect, 12f, out followButtonLabel);
+        followButtonBackground = followButton.GetComponent<Image>();
+        followButtonIcon = followButton.transform.Find("Icon")?.GetComponent<Image>();
         followButton.onClick.AddListener(ToggleFollow);
         AttachHoverTooltip(followButton, "Follow");
         abortButton = CreateActionButton("Abort Target", AbortCommandIconResourcePath, panelRect, 90f, out _);
+        abortButtonBackground = abortButton.GetComponent<Image>();
+        abortButtonIcon = abortButton.transform.Find("Icon")?.GetComponent<Image>();
         abortButton.onClick.AddListener(AbortSelectedBatch);
         AttachHoverTooltip(abortButton, "Abort Target");
         destroyButton = CreateActionButton("Destroy Batch", DestroyCommandIconResourcePath, panelRect, 168f, out _);
+        destroyButtonBackground = destroyButton.GetComponent<Image>();
+        destroyButtonIcon = destroyButton.transform.Find("Icon")?.GetComponent<Image>();
         destroyButton.onClick.AddListener(DestroySelectedBatch);
         AttachHoverTooltip(destroyButton, "Destroy Batch");
         BuildNeutrophilVariantPanel(parent);
@@ -959,16 +976,28 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
         if (infectionSpawner != null)
             infectionSpawner.SetBatchDeploymentTargetSelectionPrompt(isAwaitingDeploymentTarget);
 
-        followButton.interactable = selectedBatch != null && selectedBatch.HasEnteredCirculatorySystem &&
-            selectedBatch.Status == LymphaticBatchGroup.BatchStatus.Mobilizing;
-        abortButton.interactable = selectedBatch != null && selectedBatch.Status != LymphaticBatchGroup.BatchStatus.Ready;
-        destroyButton.interactable = selectedBatch != null;
         bool isSelectedBatchFollowed = isFollowingBatch && followedBatchId == selectedBatchId;
+        bool canFollowSelectedBatch = layerAvailable && selectedBatch != null &&
+            selectedBatch.HasEnteredCirculatorySystem && selectedBatch.Status == LymphaticBatchGroup.BatchStatus.Mobilizing;
+        bool canAbortSelectedBatch = layerAvailable && selectedBatch != null &&
+            selectedBatch.Status != LymphaticBatchGroup.BatchStatus.Ready;
+        bool hasSelectedBatch = layerAvailable && selectedBatch != null;
+
+        followButton.interactable = canFollowSelectedBatch;
+        abortButton.interactable = canAbortSelectedBatch;
+        destroyButton.interactable = hasSelectedBatch;
         followButtonLabel.text = isSelectedBatchFollowed ? "UNFOLLOW" : "FOLLOW";
         followButtonLabel.color = isSelectedBatchFollowed ? FollowingIndicatorColor : MainTextColor;
         followButton.colors = isSelectedBatchFollowed
             ? CreateButtonColors(FollowingSlotColor, FollowingIndicatorColor)
             : CreateButtonColors(ActiveSlotColor, SelectedSlotColor);
+
+        SetActionButtonVisuals(followButtonBackground, followButtonIcon, canFollowSelectedBatch,
+            isSelectedBatchFollowed ? FollowingSlotColor : ActiveSlotColor, FollowActionIconColor);
+        SetActionButtonVisuals(abortButtonBackground, abortButtonIcon, canAbortSelectedBatch,
+            ActiveSlotColor, AbortActionIconColor);
+        SetActionButtonVisuals(destroyButtonBackground, destroyButtonIcon, hasSelectedBatch,
+            ActiveSlotColor, DestroyActionIconColor);
 
         if (selectionHintLabel != null)
         {
@@ -1328,6 +1357,16 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
         image.color = color;
         image.raycastTarget = false;
     }
+
+    private static void SetActionButtonVisuals(Image background, Image icon, bool isInteractable,
+        Color activeBackgroundColor, Color activeIconColor)
+    {
+        if (background != null)
+            background.color = isInteractable ? activeBackgroundColor : DisabledActionButtonColor;
+        if (icon != null)
+            icon.color = isInteractable ? activeIconColor : DisabledActionIconColor;
+    }
+
 
     private static ColorBlock CreateButtonColors(Color normalColor, Color highlightedColor)
     {
