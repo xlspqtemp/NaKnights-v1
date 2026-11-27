@@ -8,6 +8,7 @@ using UnityEngine.Video;
 [DisallowMultipleComponent]
 public sealed class WoundBreachQtePopupUI : MonoBehaviour
 {
+    private const int CirculatoryLayerNumber = 2;
     private const string HudCanvasObjectName = "HUDCanvas";
     private const string PopupRootObjectName = "Wound Breach QTE Popup";
     private const string VideoResourcePath = "Wound breach pop up";
@@ -265,6 +266,9 @@ public sealed class WoundBreachQtePopupUI : MonoBehaviour
             CameraScript cameraController = FindFirstObjectByType<CameraScript>();
             if (cameraController != null)
             {
+                if (cameraController.SelectedLayer != CirculatoryLayerNumber)
+                    cameraController.SelectLayerWithoutCameraMove(CirculatoryLayerNumber);
+
                 cameraController.ClearFollowTarget();
                 cameraController.FocusOnWorldPosition(wound.transform.position);
             }

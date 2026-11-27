@@ -873,7 +873,7 @@ public class CameraScript : MonoBehaviour
         suppressCameraPositionOnLayerSelection = true;
         try
         {
-            SelectLayer(layerNumber);
+            SetSelectedLayer(layerNumber, false);
         }
         finally
         {

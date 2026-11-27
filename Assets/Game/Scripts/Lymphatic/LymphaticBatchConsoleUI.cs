@@ -28,8 +28,8 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
     private const float MinimumProgressEstimateSeconds = 0.05f;
     private const string FontResourcePath = "BankGothicMediumSDF";
 
-    private const string FollowCommandIconResourcePath = "UI/Follow command icon";
-    private const string AbortCommandIconResourcePath = "UI/Abort target icon";
+    private const string FollowCommandIconResourcePath = "UI/Follow command icon White";
+    private const string AbortCommandIconResourcePath = "UI/Abort target icon Yellow";
     private const string DestroyCommandIconResourcePath = "UI/Destroy batches icon";
     private const string BCellIconResourcePath = "UI/B cell headshot icon";
     private const string TCellIconResourcePath = "UI/Killet t cell headshot icon";
