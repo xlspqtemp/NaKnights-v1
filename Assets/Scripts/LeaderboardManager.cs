@@ -3,14 +3,16 @@ using System.Collections.Generic;
 using LootLocker;
 using LootLocker.Requests;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
-/// Submits eligible run scores and loads rows for the wellness-best player leaderboard.
+/// Submits eligible run ratings and loads rows for the rating-score player leaderboard.
 /// </summary>
 public class LeaderboardManager : MonoBehaviour
 {
-    private const string LeaderboardKey = "wellness_best";
+    private const string LeaderboardKey = "rating_score";
+    private const string RatingConfigResourceName = "RatingConfig";
     private const int LeaderboardEntryCount = 20;
     private const int LeaderboardStartOffset = 0;
     private const string OfflineMessage = "Leaderboards need an internet connection.";
@@ -33,13 +35,17 @@ public class LeaderboardManager : MonoBehaviour
     [Serializable]
     private sealed class ScoreMetadata
     {
+        public string letter;
         public string difficulty;
+        public float daysSurvived;
     }
 
     private Text statusText;
     private Button retryButton;
     private Text[] rankTexts;
     private Text[] playerNameTexts;
+    private Text[] letterTexts;
+    private Image[] letterBadgeImages;
     private Text[] scoreTexts;
     private Text[] difficultyTexts;
     private Image[] rowBackgrounds;
@@ -52,12 +58,14 @@ public class LeaderboardManager : MonoBehaviour
     /// Binds the leaderboard UI and immediately starts loading scores.
     /// </summary>
     public void Initialize(Text requestStatusText, Button requestRetryButton, Text[] rowRanks,
-        Text[] rowPlayers, Text[] rowScores, Text[] rowDifficulties, Image[] backgrounds)
+        Text[] rowPlayers, Text[] rowLetters, Image[] rowLetterBadges, Text[] rowScores, Text[] rowDifficulties, Image[] backgrounds)
     {
         statusText = requestStatusText;
         retryButton = requestRetryButton;
         rankTexts = rowRanks;
         playerNameTexts = rowPlayers;
+        letterTexts = rowLetters;
+        letterBadgeImages = rowLetterBadges;
         scoreTexts = rowScores;
         difficultyTexts = rowDifficulties;
         rowBackgrounds = backgrounds;
@@ -144,14 +152,23 @@ public class LeaderboardManager : MonoBehaviour
         });
     }
 
-    /// <summary>
-    /// Submits a final wellness score once for a winning White Label session.
-    /// </summary>
+    /// <summary>Submits the final rating once for an eligible account-backed run.</summary>
     public void SubmitWinningScore(float finalWellness, Action<string> onStatus)
+    {
+        SubmitRunRating(onStatus);
+    }
+
+    /// <summary>Submits the final rating for a lost run.</summary>
+    private void SubmitLostRunRating()
+    {
+        SubmitRunRating(null);
+    }
+
+    private void SubmitRunRating(Action<string> onStatus)
     {
         if (scoreSubmissionAttempted)
         {
-            Debug.LogWarning("[LEADERBOARD] Duplicate winning-score submission was blocked.");
+            Debug.LogWarning("[LEADERBOARD] Duplicate run-rating submission was blocked.");
             return;
         }
 
@@ -192,8 +209,29 @@ public class LeaderboardManager : MonoBehaviour
             return;
         }
 
-        int score = Mathf.RoundToInt(finalWellness);
-        string metadata = CreateDifficultyMetadata();
+        RunStats runStats = RunStats.Instance != null ? RunStats.Instance : FindFirstObjectByType<RunStats>();
+        if (runStats == null)
+        {
+            Debug.LogError("[LEADERBOARD] Rating submission skipped because the Game scene has no active RunStats recorder.");
+            onStatus?.Invoke(SaveFailureMessage);
+            return;
+        }
+
+        DayCounterUI dayCounter = FindFirstObjectByType<DayCounterUI>();
+        string difficulty = DifficultySettings.CurrentStats != null
+            ? DifficultySettings.CurrentStats.difficultyName
+            : GetDifficultyNameForSelectedIndex(DifficultySettings.SelectedDifficultyIndex);
+        float targetDays = dayCounter != null ? dayCounter.TotalGameDays : 14f;
+        RatingConfig ratingConfig = Resources.Load<RatingConfig>(RatingConfigResourceName);
+        RatingCalculator.RatingResult rating = RatingCalculator.Evaluate(runStats, difficulty, targetDays, ratingConfig);
+        RunStats.RatingSnapshot snapshot = runStats != null ? runStats.GetRatingSnapshot() : null;
+        float daysSurvived = snapshot != null ? snapshot.daysSurvived : 0f;
+        string normalizedDifficulty = NormalizeDifficultyName(difficulty);
+        if (string.IsNullOrEmpty(normalizedDifficulty))
+            normalizedDifficulty = difficulty;
+
+        int score = rating.TotalScore;
+        string metadata = CreateRatingMetadata(rating, normalizedDifficulty, daysSurvived);
         Debug.Log($"[LEADERBOARD] Before submit: key={LeaderboardKey}, score={score}, memberId='', metadata={metadata}.");
         onStatus?.Invoke(SavingScoreMessage);
 
@@ -210,12 +248,50 @@ public class LeaderboardManager : MonoBehaviour
             Debug.Log($"[LEADERBOARD] Submit callback: success={success}, errorData.message='{errorMessage}', statusCode={statusCode}, errorData.code='{errorCode}'.");
 
             if (this == null)
-            {
                 return;
-            }
 
             onStatus?.Invoke(success ? SavedScoreMessage : SaveFailureMessage);
         }, playerUlid);
+    }
+
+    private static WellnessManager subscribedWellnessManager;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void InitializeLostRunSubmissionHook()
+    {
+        SceneManager.sceneLoaded -= HandleSceneLoaded;
+        SceneManager.sceneLoaded += HandleSceneLoaded;
+        SubscribeToActiveWellnessManager();
+    }
+
+    private static void HandleSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        SubscribeToActiveWellnessManager();
+    }
+
+    private static void SubscribeToActiveWellnessManager()
+    {
+        WellnessManager activeWellnessManager = FindFirstObjectByType<WellnessManager>();
+        if (subscribedWellnessManager == activeWellnessManager)
+            return;
+
+        if (subscribedWellnessManager != null)
+            subscribedWellnessManager.OnGameLost -= HandleLostRun;
+        subscribedWellnessManager = activeWellnessManager;
+        if (subscribedWellnessManager != null)
+            subscribedWellnessManager.OnGameLost += HandleLostRun;
+    }
+
+    private static void HandleLostRun(WellnessRunResult result)
+    {
+        WellnessManager activeWellnessManager = subscribedWellnessManager;
+        if (activeWellnessManager == null)
+            return;
+
+        LeaderboardManager leaderboardManager = activeWellnessManager.GetComponent<LeaderboardManager>();
+        if (leaderboardManager == null)
+            leaderboardManager = activeWellnessManager.gameObject.AddComponent<LeaderboardManager>();
+        leaderboardManager.SubmitLostRunRating();
     }
 
     /// <summary>Activates a local-only guest session without creating a cloud account.</summary>
@@ -362,16 +438,18 @@ public class LeaderboardManager : MonoBehaviour
         }, playerUlid);
     }
 
-    private static string CreateDifficultyMetadata()
+    private static string CreateRatingMetadata(RatingCalculator.RatingResult rating, string difficulty, float daysSurvived)
     {
-        DifficultyStats selectedStats = DifficultySettings.CurrentStats;
-        string difficulty = NormalizeDifficultyName(selectedStats != null ? selectedStats.difficultyName : null);
-        if (string.IsNullOrEmpty(difficulty))
-        {
-            difficulty = GetDifficultyNameForSelectedIndex(DifficultySettings.SelectedDifficultyIndex);
-        }
+        string normalizedDifficulty = NormalizeDifficultyName(difficulty);
+        if (string.IsNullOrEmpty(normalizedDifficulty))
+            normalizedDifficulty = difficulty;
 
-        return JsonUtility.ToJson(new ScoreMetadata { difficulty = difficulty });
+        return JsonUtility.ToJson(new ScoreMetadata
+        {
+            letter = rating.Letter,
+            difficulty = normalizedDifficulty,
+            daysSurvived = daysSurvived
+        });
     }
 
     private static string GetDifficultyNameForSelectedIndex(int selectedIndex)
@@ -480,6 +558,19 @@ public class LeaderboardManager : MonoBehaviour
                 playerNameTexts[i].gameObject.SetActive(true);
             }
 
+            ScoreMetadata scoreMetadata = ParseScoreMetadata(entry.metadata);
+            if (letterTexts != null && i < letterTexts.Length && letterTexts[i] != null)
+            {
+                letterTexts[i].text = scoreMetadata.letter;
+                letterTexts[i].color = Color.white;
+                letterTexts[i].gameObject.SetActive(true);
+            }
+            if (letterBadgeImages != null && i < letterBadgeImages.Length && letterBadgeImages[i] != null)
+            {
+                letterBadgeImages[i].color = GetLetterColor(scoreMetadata.letter);
+                letterBadgeImages[i].gameObject.SetActive(true);
+            }
+
             if (scoreTexts[i] != null)
             {
                 scoreTexts[i].text = entry.score.ToString();
@@ -488,7 +579,7 @@ public class LeaderboardManager : MonoBehaviour
 
             if (difficultyTexts[i] != null)
             {
-                difficultyTexts[i].text = ParseDifficulty(entry.metadata);
+                difficultyTexts[i].text = scoreMetadata.difficulty;
                 difficultyTexts[i].gameObject.SetActive(true);
             }
 
@@ -521,27 +612,51 @@ public class LeaderboardManager : MonoBehaviour
         return prefix.Substring(0, prefixLength) + DisplayNameSuffix;
     }
 
-    private static string ParseDifficulty(string metadata)
+    private static ScoreMetadata ParseScoreMetadata(string metadata)
     {
-        if (string.IsNullOrWhiteSpace(metadata))
+        ScoreMetadata missingMetadata = new ScoreMetadata
         {
-            return MissingDifficultyLabel;
-        }
+            letter = MissingDifficultyLabel,
+            difficulty = MissingDifficultyLabel,
+            daysSurvived = 0f
+        };
+        if (string.IsNullOrWhiteSpace(metadata))
+            return missingMetadata;
 
         try
         {
             ScoreMetadata parsed = JsonUtility.FromJson<ScoreMetadata>(metadata);
-            if (parsed == null || string.IsNullOrWhiteSpace(parsed.difficulty))
-            {
-                return MissingDifficultyLabel;
-            }
+            if (parsed == null)
+                return missingMetadata;
+
+            string letter = string.IsNullOrWhiteSpace(parsed.letter) ? MissingDifficultyLabel : parsed.letter.Trim().ToUpperInvariant();
+            if (letter != "S" && letter != "A" && letter != "B" && letter != "C" && letter != "D")
+                letter = MissingDifficultyLabel;
 
             string difficulty = NormalizeDifficultyName(parsed.difficulty);
-            return string.IsNullOrEmpty(difficulty) ? LegacyDifficultyLabel : difficulty;
+            return new ScoreMetadata
+            {
+                letter = letter,
+                difficulty = string.IsNullOrEmpty(difficulty) ? MissingDifficultyLabel : difficulty,
+                daysSurvived = parsed.daysSurvived
+            };
         }
         catch (Exception)
         {
-            return LegacyDifficultyLabel;
+            return missingMetadata;
+        }
+    }
+
+    private static Color GetLetterColor(string letter)
+    {
+        switch (letter)
+        {
+            case "S": return new Color(1f, 0.78f, 0.18f, 1f);
+            case "A": return new Color(0.12f, 0.88f, 0.65f, 1f);
+            case "B": return new Color(0.16f, 0.76f, 0.98f, 1f);
+            case "C": return new Color(1f, 0.62f, 0.22f, 1f);
+            case "D": return new Color(0.98f, 0.28f, 0.3f, 1f);
+            default: return new Color(0.65f, 0.77f, 0.79f, 1f);
         }
     }
 
@@ -556,8 +671,11 @@ public class LeaderboardManager : MonoBehaviour
         {
             SetRowText(rankTexts, i, string.Empty);
             SetRowText(playerNameTexts, i, string.Empty);
+            SetRowText(letterTexts, i, string.Empty);
             SetRowText(scoreTexts, i, string.Empty);
             SetRowText(difficultyTexts, i, string.Empty);
+            if (letterBadgeImages != null && i < letterBadgeImages.Length && letterBadgeImages[i] != null)
+                letterBadgeImages[i].gameObject.SetActive(false);
             if (rowBackgrounds != null && i < rowBackgrounds.Length && rowBackgrounds[i] != null)
             {
                 rowBackgrounds[i].gameObject.SetActive(false);

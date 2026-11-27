@@ -3,7 +3,7 @@ using UnityEngine.Events;
 using UnityEngine.UI;
 
 /// <summary>
-/// Builds and displays the online wellness leaderboard over the main menu.
+/// Builds and displays the online rating leaderboard over the main menu.
 /// </summary>
 public static class LeaderboardsScreen
 {
@@ -64,16 +64,19 @@ public static class LeaderboardsScreen
             new Vector2(168f, 66f), Close);
 
         CreateColumnHeader(overlayRoot.transform, "RankHeader", "RANK", new Vector2(-660f, 302f), new Vector2(110f, 30f));
-        CreateColumnHeader(overlayRoot.transform, "PlayerHeader", "PLAYER", new Vector2(-410f, 302f), new Vector2(460f, 30f));
-        CreateColumnHeader(overlayRoot.transform, "WellnessHeader", "WELLNESS SCORE", new Vector2(70f, 302f), new Vector2(220f, 30f));
-        CreateColumnHeader(overlayRoot.transform, "DifficultyHeader", "DIFFICULTY", new Vector2(490f, 302f), new Vector2(640f, 30f));
+        CreateColumnHeader(overlayRoot.transform, "PlayerHeader", "PLAYER", new Vector2(-390f, 302f), new Vector2(460f, 30f));
+        CreateColumnHeader(overlayRoot.transform, "LetterHeader", "GRADE", new Vector2(-45f, 302f), new Vector2(130f, 30f));
+        CreateColumnHeader(overlayRoot.transform, "DifficultyHeader", "DIFFICULTY", new Vector2(250f, 302f), new Vector2(300f, 30f));
+        CreateColumnHeader(overlayRoot.transform, "ScoreHeader", "SCORE", new Vector2(650f, 302f), new Vector2(180f, 30f));
 
         Text[] ranks = new Text[EntryCount];
         Text[] playerNames = new Text[EntryCount];
+        Text[] letters = new Text[EntryCount];
+        Image[] letterBadges = new Image[EntryCount];
         Text[] scores = new Text[EntryCount];
         Text[] difficulties = new Text[EntryCount];
         Image[] backgrounds = new Image[EntryCount];
-        CreateRows(overlayRoot.transform, ranks, playerNames, scores, difficulties, backgrounds);
+        CreateRows(overlayRoot.transform, ranks, playerNames, letters, letterBadges, scores, difficulties, backgrounds);
 
         Text statusText = CreateText(overlayRoot.transform, "LeaderboardStatus", "Loading...", StatusFontSize,
             FontStyle.Normal, MutedTextColor, new Vector2(0f, -45f), new Vector2(1100f, 48f));
@@ -83,11 +86,11 @@ public static class LeaderboardsScreen
         retryButton.gameObject.SetActive(false);
 
         leaderboardManager = overlayRoot.AddComponent<LeaderboardManager>();
-        leaderboardManager.Initialize(statusText, retryButton, ranks, playerNames, scores, difficulties, backgrounds);
+        leaderboardManager.Initialize(statusText, retryButton, ranks, playerNames, letters, letterBadges, scores, difficulties, backgrounds);
     }
 
-    private static void CreateRows(Transform parent, Text[] ranks, Text[] playerNames, Text[] scores,
-        Text[] difficulties, Image[] backgrounds)
+    private static void CreateRows(Transform parent, Text[] ranks, Text[] playerNames, Text[] letters,
+        Image[] letterBadges, Text[] scores, Text[] difficulties, Image[] backgrounds)
     {
         for (int i = 0; i < EntryCount; i++)
         {
@@ -100,11 +103,16 @@ public static class LeaderboardsScreen
             ranks[i] = CreateText(row.transform, "Rank", string.Empty, EntryFontSize,
                 FontStyle.Normal, TextColor, new Vector2(-660f, 0f), new Vector2(110f, RowHeight));
             playerNames[i] = CreateText(row.transform, "PlayerName", string.Empty, EntryFontSize,
-                FontStyle.Normal, TextColor, new Vector2(-410f, 0f), new Vector2(460f, RowHeight));
-            scores[i] = CreateText(row.transform, "WellnessScore", string.Empty, EntryFontSize,
-                FontStyle.Bold, TextColor, new Vector2(70f, 0f), new Vector2(220f, RowHeight));
+                FontStyle.Normal, TextColor, new Vector2(-390f, 0f), new Vector2(460f, RowHeight));
+            letterBadges[i] = CreateImage(row.transform, "LetterBadgeBackground", MutedTextColor,
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(-45f, 0f), new Vector2(48f, 26f), false).GetComponent<Image>();
+            letters[i] = CreateText(row.transform, "LetterBadge", string.Empty, EntryFontSize + 2,
+                FontStyle.Bold, TextColor, new Vector2(-45f, 0f), new Vector2(48f, RowHeight));
+            scores[i] = CreateText(row.transform, "Score", string.Empty, EntryFontSize,
+                FontStyle.Bold, TextColor, new Vector2(650f, 0f), new Vector2(180f, RowHeight));
             difficulties[i] = CreateText(row.transform, "Difficulty", string.Empty, EntryFontSize,
-                FontStyle.Normal, TextColor, new Vector2(490f, 0f), new Vector2(640f, RowHeight));
+                FontStyle.Normal, TextColor, new Vector2(250f, 0f), new Vector2(300f, RowHeight));
         }
     }
 
