@@ -558,6 +558,8 @@ public sealed class WoundRepairPoint : MonoBehaviour
         }
 
         isRepairing = true;
+        if (breachTriggersQte)
+            RunStats.RecordWoundRepairAttempt();
         WoundBreachQtePopupUI.HideFor(this);
         repairAttemptElapsed = 0f;
         floatingCanvas.gameObject.SetActive(false);
@@ -1079,6 +1081,8 @@ public sealed class WoundRepairPoint : MonoBehaviour
         }
 
         QTETracker.Unregister(QTETracker.CirculatoryLayerIndex, wellnessEventKey);
+        if (breachTriggersQte)
+            RunStats.RecordWoundRepairSuccess();
         NotifySkinBreachStateChanged();
     }
 

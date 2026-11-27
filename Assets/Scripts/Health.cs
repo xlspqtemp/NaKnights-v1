@@ -83,6 +83,7 @@ public sealed class Health : MonoBehaviour
         if (currentHp <= 0f)
         {
             GetComponent<WbcVoiceLines>()?.PlayUnitDestroyed();
+            RunStats.RecordUnitLost(this);
             BeginRemoval();
         }
     }

@@ -1143,6 +1143,16 @@ public sealed class LymphaticBatchConsoleUI : MonoBehaviour
             return;
         }
 
+        string deployedUnitType = selectedBatch != null ? selectedBatch.UnitType : "Unknown";
+        if (selectedBatch != null && string.Equals(deployedUnitType, NeutrophilUnitName, StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(selectedBatch.InnateCellVariant, EosinophilVariantName, StringComparison.OrdinalIgnoreCase))
+                deployedUnitType = EosinophilDisplayName;
+            else if (string.Equals(selectedBatch.InnateCellVariant, BasophilVariantName, StringComparison.OrdinalIgnoreCase))
+                deployedUnitType = BasophilDisplayName;
+        }
+        RunStats.RecordDeployment(deployedUnitType, marker, selectedBatch != null ? selectedBatch.Members : null);
+
         string deployedVariant = selectedNeutrophilVariantName;
         awaitingTargetSelection = false;
         selectedNeutrophilVariantName = null;

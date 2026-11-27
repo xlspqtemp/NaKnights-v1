@@ -1154,6 +1154,7 @@ public sealed class InfectionSpawner : MonoBehaviour
     {
         float previousSupply = leukocyteSupply;
         leukocyteSupply = Mathf.Max(0f, leukocyteSupply - Mathf.Max(0, amount));
+        RunStats.RecordSupplySpent(previousSupply - leukocyteSupply);
         if (leukocyteSupply < previousSupply)
             leukocyteSupplyBarFlashRemaining = LeukocyteSupplyBarFlashDurationSeconds;
         RefreshLeukocyteSupplyBar();
@@ -2208,6 +2209,7 @@ public sealed class InfectionSpawner : MonoBehaviour
                 && infectionTarget.infection.pathogenType != InfectionPathogenType.Parasite,
             infectionTarget = infectionTarget
         });
+        RunStats.RecordDeployment(NeutrophilDisplayName, infectionTarget, idleSquad);
         SpendLeukocyteSupply(deployCost);
         idleSquad[0].GetComponent<WbcVoiceLines>()?.PlayDeploymentAccepted();
         idleSquad = null;
@@ -4484,6 +4486,7 @@ public sealed class InfectionSpawner : MonoBehaviour
                 continue;
 
             marker.unresolvedDays++;
+            RunStats.RecordUnresolvedDay(marker);
             float dailyCost = marker.infection.neglectLoss > 0
                 ? marker.infection.neglectLoss
                 : GetDailyInfectionWellnessCost(marker.infection.severityStage);
@@ -4708,6 +4711,10 @@ public sealed class InfectionSpawner : MonoBehaviour
     {
         if (marker == null || marker.isRemoving || !activeInfectionMarkers.Contains(marker))
             return;
+
+        bool resolvedForStats = !marker.isTutorialMarker || marker.isContained || marker.resolutionPending ||
+            marker.wellnessGainAwardedOnResolve || marker.tutorialAntigenCollectionAttempted || marker.allWavesCleared;
+        RunStats.RecordInfectionRemoved(marker, resolvedForStats);
 
         bool shouldDespawnResolvedSquads = marker.infection == null
             || marker.infection.pathogenType != InfectionPathogenType.Viral
@@ -5337,6 +5344,7 @@ public sealed class InfectionSpawner : MonoBehaviour
         };
 
         activeInfectionMarkers.Add(marker);
+        RunStats.RecordInfectionSpawn(marker);
         if (adaptiveResponsePopup == null)
             CreateAdaptiveResponsePopup();
         if (adaptiveResponsePopup != null)

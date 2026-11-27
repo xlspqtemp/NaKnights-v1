@@ -13,6 +13,9 @@ public sealed class LungInfectionResponse : MonoBehaviour
     /// <summary>Notifies listeners when a lung repair response starts or stops.</summary>
     public static event Action<LungInfectionResponse, bool> RepairQTEStateChanged;
 
+    /// <summary>Gets whether this response currently has an associated event QTE.</summary>
+    public bool HasPendingQte => pendingWellnessEventKeys.Count > 0;
+
     private const float SecondsPerInfiltration = 10f;
     private const float OxygenBoostDurationSeconds = 15f;
     internal const string OxygenBoostIconObjectName = "Oxygen Boost Perk Timer";
@@ -273,7 +276,10 @@ public sealed class LungInfectionResponse : MonoBehaviour
         }
         pendingWellnessEventKeys.Clear();
         if (completedQte)
+        {
+            RunStats.RecordLungRepairSuccess();
             ActivateOxygenBoost();
+        }
         DestroySpawnedImmuneCells();
         RefreshSharedRespiratoryTint();
         if (floatingCanvas != null)
