@@ -76,7 +76,6 @@ public sealed class DigestiveSystemController : MonoBehaviour
     [Header("Digestive Barrier Assist")]
     [SerializeField] private bool useLegacyDigestiveAssist = false;
     [SerializeField, Min(0f)] private float barrierWindRate = 12f;
-    [SerializeField, Range(0f, 1f)] private float respiratoryQteDecayMultiplier = 0.5f;
     [SerializeField, Min(0f)] private float breachGracePeriod = 2f;
     [SerializeField] private KeyCode windKey = KeyCode.Space;
     [SerializeField] private bool enableSweetSpotBand;
@@ -562,45 +561,35 @@ public sealed class DigestiveSystemController : MonoBehaviour
 
     private void UpdateDigestiveBarrier(float gameplayDelta)
     {
-        if (barrierHealth == null)
+        if (barrierHealth == null || gameplayDelta <= 0f)
             return;
 
         bool respiratoryRepairActive = activeRespiratoryRepairs.Count > 0;
-        if (windPointerHeld && gameplayDelta > 0f)
+        if (windPointerHeld)
             windPointerHeldDuration += gameplayDelta;
         bool windRequested = windPointerHeld || (windKey != KeyCode.None && Input.GetKey(windKey));
-        if (gameplayDelta > 0f)
+        if (windRequested && !respiratoryRepairActive)
         {
-            if (windRequested && !respiratoryRepairActive)
-            {
-                float currentBarrier = barrierHealth.CurrentBarrier;
-                barrierHealth.RestoreBarrier(Mathf.Max(0f, barrierWindRate) * gameplayDelta);
-                if (barrierHealth.CurrentBarrier > currentBarrier)
-                    breachGraceRemaining = -1f;
-            }
-            else
-            {
-                DifficultyStats difficultyStats = DifficultySettings.CurrentStats;
-                float decayRate = difficultyStats != null ? Mathf.Max(0f, difficultyStats.digestiveBarrierDecayPerSecond) : 1.6f;
-                float qteDecayScale = respiratoryRepairActive ? Mathf.Clamp01(respiratoryQteDecayMultiplier) : 1f;
-                ApplyDigestiveBarrierLoss(decayRate * qteDecayScale * gameplayDelta);
-            }
+            float currentBarrier = barrierHealth.CurrentBarrier;
+            barrierHealth.RestoreBarrier(Mathf.Max(0f, barrierWindRate) * gameplayDelta);
+            if (barrierHealth.CurrentBarrier > currentBarrier)
+                breachGraceRemaining = -1f;
+        }
 
-            if (barrierHealth.CurrentBarrier <= BreachGraceFloor)
-            {
-                if (breachGraceRemaining < 0f)
-                    breachGraceRemaining = Mathf.Max(0f, breachGracePeriod);
-                breachGraceRemaining = Mathf.Max(0f, breachGraceRemaining - gameplayDelta);
-                if (breachGraceRemaining <= 0f)
-                {
-                    breachGraceRemaining = -1f;
-                    barrierHealth.TakeDamage(BarrierMaximum);
-                }
-            }
-            else
+        if (barrierHealth.CurrentBarrier <= BreachGraceFloor)
+        {
+            if (breachGraceRemaining < 0f)
+                breachGraceRemaining = Mathf.Max(0f, breachGracePeriod);
+            breachGraceRemaining = Mathf.Max(0f, breachGraceRemaining - gameplayDelta);
+            if (breachGraceRemaining <= 0f)
             {
                 breachGraceRemaining = -1f;
+                barrierHealth.TakeDamage(BarrierMaximum);
             }
+        }
+        else
+        {
+            breachGraceRemaining = -1f;
         }
     }
 

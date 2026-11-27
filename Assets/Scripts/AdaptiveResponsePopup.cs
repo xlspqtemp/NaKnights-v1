@@ -26,12 +26,19 @@ public sealed class AdaptiveResponsePopup : MonoBehaviour
 
     [SerializeField] private AudioClip resolvedSoundClip;
 
+    /// <summary>Raised when a pathogen-appearance popup becomes visible or fully closes.</summary>
+    public static event System.Action<bool> PathogenAppearanceVisibilityChanged;
+
+    /// <summary>Gets whether a pathogen-appearance message is the currently displayed popup.</summary>
+    public static bool IsPathogenAppearanceVisible { get; private set; }
+
     private sealed class PopupMessage
     {
         public string title;
         public string subtitle;
         public string message;
         public Sprite icon;
+        public bool isPathogenAppearance;
 
         public PopupMessage(string title, string subtitle)
         {
@@ -39,10 +46,11 @@ public sealed class AdaptiveResponsePopup : MonoBehaviour
             this.subtitle = subtitle;
         }
 
-        public PopupMessage(string message, Sprite icon)
+        public PopupMessage(string message, Sprite icon, bool isPathogenAppearance = false)
         {
             this.message = message;
             this.icon = icon;
+            this.isPathogenAppearance = isPathogenAppearance;
         }
 
         public bool IsInlineMessage => !string.IsNullOrEmpty(message);
@@ -103,7 +111,7 @@ public sealed class AdaptiveResponsePopup : MonoBehaviour
             return;
 
         string resolvedName = string.IsNullOrWhiteSpace(pathogenName) ? "Pathogen" : pathogenName;
-        EnqueueMessage("A " + resolvedName + " has appeared!", LoadPathogenIcon(pathogenType));
+        EnqueuePathogenAppearanceMessage("A " + resolvedName + " has appeared!", LoadPathogenIcon(pathogenType));
     }
 
     /// <summary>Queues the antigen collection message using the same icon-first HUD popup.</summary>
@@ -138,6 +146,27 @@ public sealed class AdaptiveResponsePopup : MonoBehaviour
         pendingMessages.Enqueue(new PopupMessage(message, icon));
         if (phase == PopupPhase.Hidden)
             BeginNextPopup();
+    }
+
+    private void EnqueuePathogenAppearanceMessage(string message, Sprite icon)
+    {
+        pendingMessages.Enqueue(new PopupMessage(message, icon, true));
+        if (phase == PopupPhase.Hidden)
+            BeginNextPopup();
+    }
+
+    private static void SetPathogenAppearanceVisible(bool isVisible)
+    {
+        if (IsPathogenAppearanceVisible == isVisible)
+            return;
+
+        IsPathogenAppearanceVisible = isVisible;
+        PathogenAppearanceVisibilityChanged?.Invoke(isVisible);
+    }
+
+    private void OnDisable()
+    {
+        SetPathogenAppearanceVisible(false);
     }
 
     private static Sprite LoadPathogenIcon(InfectionPathogenType pathogenType)
@@ -215,12 +244,14 @@ public sealed class AdaptiveResponsePopup : MonoBehaviour
         if (pendingMessages.Count == 0)
         {
             phase = PopupPhase.Hidden;
+            SetPathogenAppearanceVisible(false);
             if (gameObject.activeSelf)
                 gameObject.SetActive(false);
             return;
         }
 
         PopupMessage message = pendingMessages.Dequeue();
+        SetPathogenAppearanceVisible(message.isPathogenAppearance);
         bool showInlineMessage = message.IsInlineMessage;
         titleLabel.gameObject.SetActive(!showInlineMessage);
         subtitleLabel.gameObject.SetActive(!showInlineMessage);

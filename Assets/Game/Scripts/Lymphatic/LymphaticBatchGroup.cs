@@ -117,7 +117,21 @@ public sealed class LymphaticBatchGroup : MonoBehaviour
     /// <summary>Marks the batch as having completed its transfer to the circulatory system.</summary>
     public void MarkEnteredCirculatorySystem()
     {
-        GroupLeader.hasEnteredCirculatorySystem = true;
+        LymphaticBatchGroup leader = GroupLeader;
+        leader.hasEnteredCirculatorySystem = true;
+        GameObject[] members = leader.batchMembers;
+        if (members == null)
+            return;
+
+        for (int memberIndex = 0; memberIndex < members.Length; memberIndex++)
+        {
+            if (members[memberIndex] == null)
+                continue;
+
+            LymphaticBatchGroup memberGroup = members[memberIndex].GetComponent<LymphaticBatchGroup>();
+            if (memberGroup != null)
+                memberGroup.hasEnteredCirculatorySystem = true;
+        }
     }
 
     /// <summary>Records that the player aborted a target so its next deployment can announce the target change.</summary>

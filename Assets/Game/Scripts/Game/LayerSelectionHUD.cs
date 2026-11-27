@@ -18,6 +18,11 @@ internal static class LayerSelectionHUD
     private const string ControlsObjectName = "SystemLayerButtons";
     private const string SelectedLayerArrowObjectName = "SelectedLayerArrow";
     private const string BracketedSelectedLayerArrowObjectName = "[SelectedLayerArrow]";
+    private const string CirculatoryNoUnitsMessageObjectName = "CirculatoryNoUnitsMessage";
+    private const string CirculatoryNoUnitsMessageText = "you have no units! train some in lymphatic.";
+    private const float CirculatoryUnitCountRefreshInterval = 0.5f;
+    private const float CirculatoryNoUnitsPopupOffset = -72f;
+    private const float CirculatoryNoUnitsMoveSpeed = 420f;
     private const string BuiltInFontName = "LegacyRuntime.ttf";
     private const string BankGothicResourcePath = "BankGothicMediumSDF";
     private const float LayerToggleHeight = 36f;
@@ -47,6 +52,12 @@ internal static class LayerSelectionHUD
     private static RectTransform digestiveBarrierWarningBadgeRect;
     private static Sprite digestiveBarrierWarningBadgeSprite;
     private static float digestiveBarrierPercent = 100f;
+    private static GameObject circulatoryNoUnitsMessage;
+    private static RectTransform circulatoryNoUnitsMessageRect;
+    private static Vector2 circulatoryNoUnitsMessageBasePosition;
+    private static float circulatoryNoUnitsCurrentPopupOffset;
+    private static float circulatoryNoUnitsTargetPopupOffset;
+    private static float nextCirculatoryUnitCountCheckTime;
     private static Image[] layerButtonInfoBackgrounds;
     private static Outline[] layerButtonOutlines;
     private static RectTransform layerRowsRoot;
@@ -76,6 +87,13 @@ internal static class LayerSelectionHUD
         digestiveBarrierWarningBadge = null;
         digestiveBarrierWarningBadgeRect = null;
         digestiveBarrierPercent = 100f;
+        circulatoryNoUnitsMessage = null;
+        circulatoryNoUnitsMessageRect = null;
+        circulatoryNoUnitsMessageBasePosition = Vector2.zero;
+        circulatoryNoUnitsCurrentPopupOffset = 0f;
+        circulatoryNoUnitsTargetPopupOffset = 0f;
+        nextCirculatoryUnitCountCheckTime = 0f;
+        AdaptiveResponsePopup.PathogenAppearanceVisibilityChanged -= HandlePathogenAppearanceVisibilityChanged;
         layerButtonInfoBackgrounds = null;
         layerButtonOutlines = null;
         layerRowsRoot = null;
@@ -83,6 +101,10 @@ internal static class LayerSelectionHUD
         if (scene.name != GameSceneName)
             return;
 
+        AdaptiveResponsePopup.PathogenAppearanceVisibilityChanged += HandlePathogenAppearanceVisibilityChanged;
+        circulatoryNoUnitsTargetPopupOffset = AdaptiveResponsePopup.IsPathogenAppearanceVisible
+            ? CirculatoryNoUnitsPopupOffset
+            : 0f;
         RemoveStaleSelectedLayerArrows(scene);
         GameObject canvasObject = GameObject.Find(HudCanvasName);
         Canvas canvas = canvasObject != null ? canvasObject.GetComponent<Canvas>() : null;
@@ -105,6 +127,7 @@ internal static class LayerSelectionHUD
         RectTransform consolePanel = canvas.transform.Find("ConsoleLogPanel") as RectTransform;
         RectTransform controlsRoot = CreateLayerControls(canvas.transform, canvas.transform as RectTransform,
             out RectTransform toggleRect);
+        CreateCirculatoryNoUnitsMessage(canvas.transform as RectTransform);
 
         HudLeftControlRail controlRail = canvas.GetComponent<HudLeftControlRail>();
         if (controlRail == null)
@@ -268,6 +291,131 @@ internal static class LayerSelectionHUD
         return rootRect;
     }
 
+    private static void CreateCirculatoryNoUnitsMessage(RectTransform canvasRect)
+    {
+        if (canvasRect == null)
+            return;
+
+        Transform existingMessage = canvasRect.Find(CirculatoryNoUnitsMessageObjectName);
+        if (existingMessage != null)
+            Object.Destroy(existingMessage.gameObject);
+
+        GameObject messageObject = new GameObject(CirculatoryNoUnitsMessageObjectName,
+            typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        messageObject.transform.SetParent(canvasRect, false);
+        RectTransform messageRect = messageObject.GetComponent<RectTransform>();
+        messageRect.anchorMin = new Vector2(0.5f, 1f);
+        messageRect.anchorMax = new Vector2(0.5f, 1f);
+        messageRect.pivot = new Vector2(0.5f, 1f);
+        messageRect.anchoredPosition = new Vector2(0f, -96f);
+        messageRect.sizeDelta = new Vector2(720f, 54f);
+        circulatoryNoUnitsMessageRect = messageRect;
+        circulatoryNoUnitsMessageBasePosition = messageRect.anchoredPosition;
+        circulatoryNoUnitsTargetPopupOffset = AdaptiveResponsePopup.IsPathogenAppearanceVisible
+            ? CirculatoryNoUnitsPopupOffset
+            : 0f;
+
+        Image background = messageObject.GetComponent<Image>();
+        background.color = new Color(0.012f, 0.028f, 0.038f, 0.88f);
+        background.raycastTarget = false;
+
+        GameObject labelObject = new GameObject("Message", typeof(RectTransform),
+            typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        labelObject.transform.SetParent(messageRect, false);
+        RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+        labelRect.anchorMin = Vector2.zero;
+        labelRect.anchorMax = Vector2.one;
+        labelRect.offsetMin = new Vector2(14f, 4f);
+        labelRect.offsetMax = new Vector2(-14f, -4f);
+
+        TextMeshProUGUI label = labelObject.GetComponent<TextMeshProUGUI>();
+        label.font = Resources.Load<TMP_FontAsset>(BankGothicResourcePath) ?? TMP_Settings.defaultFontAsset;
+        label.fontSize = 20f;
+        label.fontStyle = FontStyles.Bold;
+        label.color = SelectedLayerTextColor;
+        label.alignment = TextAlignmentOptions.Center;
+        label.textWrappingMode = TextWrappingModes.NoWrap;
+        label.text = CirculatoryNoUnitsMessageText;
+        label.raycastTarget = false;
+
+        circulatoryNoUnitsMessage = messageObject;
+        messageObject.SetActive(false);
+        nextCirculatoryUnitCountCheckTime = 0f;
+    }
+
+    private static void RefreshCirculatoryNoUnitsMessage(float unscaledTime)
+    {
+        if (circulatoryNoUnitsMessage == null)
+            return;
+
+        if (selectedLayer != 2)
+        {
+            circulatoryNoUnitsMessage.SetActive(false);
+            return;
+        }
+
+        if (unscaledTime < nextCirculatoryUnitCountCheckTime)
+            return;
+
+        nextCirculatoryUnitCountCheckTime = unscaledTime + CirculatoryUnitCountRefreshInterval;
+        circulatoryNoUnitsMessage.SetActive(!HasLivingCirculatoryTrainedUnits());
+    }
+
+    private static void HandlePathogenAppearanceVisibilityChanged(bool isVisible)
+    {
+        circulatoryNoUnitsTargetPopupOffset = isVisible ? CirculatoryNoUnitsPopupOffset : 0f;
+    }
+
+    private static void UpdateCirculatoryNoUnitsMessagePosition()
+    {
+        if (circulatoryNoUnitsMessageRect == null)
+            return;
+
+        circulatoryNoUnitsCurrentPopupOffset = Mathf.MoveTowards(
+            circulatoryNoUnitsCurrentPopupOffset,
+            circulatoryNoUnitsTargetPopupOffset,
+            CirculatoryNoUnitsMoveSpeed * Time.unscaledDeltaTime);
+        circulatoryNoUnitsMessageRect.anchoredPosition = circulatoryNoUnitsMessageBasePosition +
+            Vector2.up * circulatoryNoUnitsCurrentPopupOffset;
+    }
+
+    private static bool HasLivingCirculatoryTrainedUnits()
+    {
+        LymphaticBatchGroup[] batches = Object.FindObjectsByType<LymphaticBatchGroup>(FindObjectsSortMode.None);
+        for (int batchIndex = 0; batchIndex < batches.Length; batchIndex++)
+        {
+            LymphaticBatchGroup batch = batches[batchIndex];
+            if (batch == null)
+                continue;
+
+            LymphaticBatchGroup leader = batch.GroupLeader;
+            if (leader == null || leader != batch)
+                continue;
+
+            IReadOnlyList<GameObject> members = leader.Members;
+            for (int memberIndex = 0; memberIndex < members.Count; memberIndex++)
+            {
+                GameObject member = members[memberIndex];
+                if (member != null && member.activeInHierarchy)
+                    return true;
+            }
+        }
+
+        CirculatoryCellRoute[] circulatingUnits = Object.FindObjectsByType<CirculatoryCellRoute>(FindObjectsSortMode.None);
+        for (int unitIndex = 0; unitIndex < circulatingUnits.Length; unitIndex++)
+        {
+            CirculatoryCellRoute circulatingUnit = circulatingUnits[unitIndex];
+            if (circulatingUnit != null && circulatingUnit.gameObject.activeInHierarchy &&
+                circulatingUnit.GetComponent<LymphaticBatchGroup>() == null)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
     private static RectTransform CreateRectObject(string objectName, RectTransform parent)
     {
         GameObject rectObject = new GameObject(objectName, typeof(RectTransform));
@@ -319,22 +467,6 @@ internal static class LayerSelectionHUD
         digestiveBarrierWarningBadge.type = Image.Type.Simple;
         digestiveBarrierWarningBadge.color = new Color(1f, 0.58f, 0.08f, 1f);
         digestiveBarrierWarningBadge.raycastTarget = false;
-
-        GameObject markObject = new GameObject("WarningMark", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
-        markObject.transform.SetParent(badgeObject.transform, false);
-        RectTransform markRect = markObject.GetComponent<RectTransform>();
-        markRect.anchorMin = Vector2.zero;
-        markRect.anchorMax = Vector2.one;
-        markRect.offsetMin = Vector2.zero;
-        markRect.offsetMax = Vector2.zero;
-        TextMeshProUGUI mark = markObject.GetComponent<TextMeshProUGUI>();
-        mark.font = TMP_Settings.defaultFontAsset;
-        mark.fontSize = 12f;
-        mark.fontStyle = FontStyles.Bold;
-        mark.color = Color.white;
-        mark.alignment = TextAlignmentOptions.Center;
-        mark.text = "!";
-        mark.raycastTarget = false;
 
         UpdateDigestiveBarrierWarningBadge(Time.unscaledTime);
     }
@@ -581,10 +713,12 @@ internal static class LayerSelectionHUD
     {
         RefreshLayerButtonVisuals(unscaledTime);
         UpdateDigestiveBarrierWarningBadge(unscaledTime);
+        UpdateCirculatoryNoUnitsMessagePosition();
     }
 
     private static void RefreshLayerButtonVisuals(float unscaledTime)
     {
+        RefreshCirculatoryNoUnitsMessage(unscaledTime);
         if (layerButtonBackgrounds == null || layerButtonOutlines == null || activeThreatKeys == null)
             return;
 
