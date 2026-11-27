@@ -33,6 +33,7 @@ public sealed class RunStats : MonoBehaviour
         public string unitType;
         public string pathogenType;
         public bool matched;
+        public int unitCount;
         public int unitsLost;
     }
 
@@ -42,6 +43,24 @@ public sealed class RunStats : MonoBehaviour
         public int day;
         public int hour;
         public float wellness;
+    }
+
+    /// <summary>Read-only copy of run telemetry for consumers such as end-of-run rating systems.</summary>
+    [Serializable]
+    public sealed class RatingSnapshot
+    {
+        public float daysSurvived;
+        public float finalWellness;
+        public float supplySpent;
+        public int woundRepairQteAttempts;
+        public int woundRepairQteSuccesses;
+        public int lungRepairQteAttempts;
+        public int lungRepairQteSuccesses;
+        public float digestiveBarrierUptimeFraction;
+        public float respiratoryBarrierUptimeFraction;
+        public List<InfectionRecord> infections = new List<InfectionRecord>();
+        public List<DeploymentRecord> deployments = new List<DeploymentRecord>();
+        public List<HourlyWellnessSample> hourlyWellness = new List<HourlyWellnessSample>();
     }
 
     [Serializable]
@@ -87,6 +106,67 @@ public sealed class RunStats : MonoBehaviour
 
     /// <summary>Gets the active run-statistics recorder.</summary>
     public static RunStats Instance => instance;
+
+    /// <summary>Returns a detached snapshot of the recorded run values.</summary>
+    public RatingSnapshot GetRatingSnapshot()
+    {
+        InitializeRunClock();
+        RatingSnapshot snapshot = new RatingSnapshot
+        {
+            daysSurvived = Mathf.Max(0f, (GetGameTimeMinutes() - runStartGameMinutes) / MinutesPerGameDay),
+            finalWellness = wellnessManager != null ? wellnessManager.CurrentWellness : 0f,
+            supplySpent = run.supplySpent,
+            woundRepairQteAttempts = run.woundRepairQteAttempts,
+            woundRepairQteSuccesses = run.woundRepairQteSuccesses,
+            lungRepairQteAttempts = run.lungRepairQteAttempts,
+            lungRepairQteSuccesses = run.lungRepairQteSuccesses,
+            digestiveBarrierUptimeFraction = run.digestiveBarrierUptimeFraction,
+            respiratoryBarrierUptimeFraction = run.respiratoryBarrierUptimeFraction
+        };
+
+        for (int index = 0; index < run.infections.Count; index++)
+        {
+            InfectionRecord source = run.infections[index];
+            snapshot.infections.Add(new InfectionRecord
+            {
+                pathogenType = source.pathogenType,
+                pathogenName = source.pathogenName,
+                spawnGameTime = source.spawnGameTime,
+                spawnGameMinutes = source.spawnGameMinutes,
+                firstDeploymentGameTime = source.firstDeploymentGameTime,
+                firstDeploymentGameMinutes = source.firstDeploymentGameMinutes,
+                escalated = source.escalated,
+                daysUnresolved = source.daysUnresolved,
+                resolved = source.resolved
+            });
+        }
+
+        for (int index = 0; index < run.deployments.Count; index++)
+        {
+            DeploymentRecord source = run.deployments[index];
+            snapshot.deployments.Add(new DeploymentRecord
+            {
+                unitType = source.unitType,
+                pathogenType = source.pathogenType,
+                matched = source.matched,
+                unitCount = source.unitCount,
+                unitsLost = source.unitsLost
+            });
+        }
+
+        for (int index = 0; index < run.hourlyWellness.Count; index++)
+        {
+            HourlyWellnessSample source = run.hourlyWellness[index];
+            snapshot.hourlyWellness.Add(new HourlyWellnessSample
+            {
+                day = source.day,
+                hour = source.hour,
+                wellness = source.wellness
+            });
+        }
+
+        return snapshot;
+    }
 
     private void Awake()
     {
@@ -248,7 +328,10 @@ public sealed class RunStats : MonoBehaviour
                 continue;
             Health health = unit.GetComponent<Health>();
             if (health != null)
+            {
+                deployment.unitCount++;
                 instance.deploymentByUnit[health] = deployment;
+            }
         }
     }
 
@@ -313,7 +396,9 @@ public sealed class RunStats : MonoBehaviour
 
     private static bool IsCorrectResponder(string unitType, InfectionCorrectResponder correctResponder)
     {
-        if (string.Equals(unitType, "Neutrophil", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(unitType, "Neutrophil", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(unitType, "Macrophage", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(unitType, "WBC", StringComparison.OrdinalIgnoreCase))
             return correctResponder == InfectionCorrectResponder.WBC;
         if (string.Equals(unitType, "T Cell", StringComparison.OrdinalIgnoreCase))
             return correctResponder == InfectionCorrectResponder.KillerT;
