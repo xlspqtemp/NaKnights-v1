@@ -31,6 +31,14 @@ public class DayCounterUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI timeLabel;     // "06:42 AM"
     [SerializeField] private TextMeshProUGUI weatherLabel;  // "Clear Weather"
     [SerializeField] private GameObject statusBadgeBG;      // optional colored pill behind the badge
+    [SerializeField] private RawImage dayIcon;
+    [SerializeField] private RawImage moonIcon;
+
+    [Header("Day/Night Icon")]
+    [SerializeField, Range(0, 23)] private int dayStartsAtHour = 6;
+    [SerializeField, Range(0, 23)] private int eveningStartsAtHour = 18;
+    [SerializeField, Min(0.01f)] private float iconTransitionDuration = 0.45f;
+    [SerializeField, Min(0f)] private float iconTransitionDistance = 24f;
 
     [Header("Progression Mode")]
     [Tooltip("RealTime: ticks on its own. Manual: you call AdvanceDay()/TickMinutes(). " +
@@ -73,8 +81,15 @@ public class DayCounterUI : MonoBehaviour
     private int currentMinute;
     private float minuteTimer;
     private float runtimeSecondsPerGameMinute;
+    private bool dayNightIconStateInitialized;
+    private bool daytimeIconShown;
+    private bool dayNightIconTransitioning;
+    private float dayNightIconTransitionElapsed;
+    private Vector2 dayIconHomePosition;
+    private Vector2 moonIconHomePosition;
 
     private const int MINUTES_PER_DAY = 24 * 60;
+    private const float MIN_ICON_TRANSITION_DURATION = 0.01f;
 
     private void Awake()
     {
@@ -157,6 +172,8 @@ public class DayCounterUI : MonoBehaviour
 
     private void Update()
     {
+        UpdateDayNightIconTransition();
+
         bool clockShouldRun = isRunning &&
             (progressionMode == ProgressionMode.RealTime || progressionMode == ProgressionMode.Hybrid);
 
@@ -286,12 +303,89 @@ public class DayCounterUI : MonoBehaviour
 
     private void RefreshTime()
     {
+        RefreshDayNightIcon();
         if (timeLabel == null) return;
 
         int displayHour = currentHour % 12;
         if (displayHour == 0) displayHour = 12;
         string ampm = currentHour < 12 ? "AM" : "PM";
         timeLabel.text = $"{displayHour} {ampm}";
+    }
+
+    private bool IsDaytime(int hour)
+    {
+        if (dayStartsAtHour == eveningStartsAtHour)
+            return true;
+
+        return dayStartsAtHour < eveningStartsAtHour
+            ? hour >= dayStartsAtHour && hour < eveningStartsAtHour
+            : hour >= dayStartsAtHour || hour < eveningStartsAtHour;
+    }
+
+    private void RefreshDayNightIcon()
+    {
+        if (dayIcon == null || moonIcon == null)
+            return;
+
+        if (!dayNightIconStateInitialized)
+        {
+            dayIconHomePosition = dayIcon.rectTransform.anchoredPosition;
+            moonIconHomePosition = moonIcon.rectTransform.anchoredPosition;
+            daytimeIconShown = IsDaytime(currentHour);
+            dayNightIconStateInitialized = true;
+            dayNightIconTransitioning = false;
+            SetIconPose(dayIcon, dayIconHomePosition, daytimeIconShown ? 1f : 0f);
+            SetIconPose(moonIcon, moonIconHomePosition, daytimeIconShown ? 0f : 1f);
+            return;
+        }
+
+        bool shouldShowDaytimeIcon = IsDaytime(currentHour);
+        if (shouldShowDaytimeIcon == daytimeIconShown)
+            return;
+
+        daytimeIconShown = shouldShowDaytimeIcon;
+        dayNightIconTransitionElapsed = 0f;
+        dayNightIconTransitioning = true;
+
+        RawImage incomingIcon = daytimeIconShown ? dayIcon : moonIcon;
+        Vector2 incomingHomePosition = daytimeIconShown ? dayIconHomePosition : moonIconHomePosition;
+        SetIconPose(incomingIcon, incomingHomePosition - Vector2.up * iconTransitionDistance, 0f);
+    }
+
+    private void UpdateDayNightIconTransition()
+    {
+        if (!dayNightIconTransitioning || dayIcon == null || moonIcon == null)
+            return;
+
+        dayNightIconTransitionElapsed += Time.unscaledDeltaTime;
+        float transitionDuration = Mathf.Max(MIN_ICON_TRANSITION_DURATION, iconTransitionDuration);
+        float progress = Mathf.Clamp01(dayNightIconTransitionElapsed / transitionDuration);
+        float easedProgress = progress * progress * (3f - 2f * progress);
+
+        RawImage incomingIcon = daytimeIconShown ? dayIcon : moonIcon;
+        RawImage outgoingIcon = daytimeIconShown ? moonIcon : dayIcon;
+        Vector2 incomingHomePosition = daytimeIconShown ? dayIconHomePosition : moonIconHomePosition;
+        Vector2 outgoingHomePosition = daytimeIconShown ? moonIconHomePosition : dayIconHomePosition;
+
+        SetIconPose(outgoingIcon, outgoingHomePosition + Vector2.up * iconTransitionDistance * easedProgress, 1f - easedProgress);
+        SetIconPose(incomingIcon, incomingHomePosition - Vector2.up * iconTransitionDistance * (1f - easedProgress), easedProgress);
+
+        if (progress >= 1f)
+        {
+            dayNightIconTransitioning = false;
+            SetIconPose(dayIcon, dayIconHomePosition, daytimeIconShown ? 1f : 0f);
+            SetIconPose(moonIcon, moonIconHomePosition, daytimeIconShown ? 0f : 1f);
+        }
+    }
+
+    private static void SetIconPose(RawImage icon, Vector2 position, float alpha)
+    {
+        RectTransform iconRect = icon.rectTransform;
+        iconRect.anchoredPosition = position;
+
+        Color iconColor = icon.color;
+        iconColor.a = alpha;
+        icon.color = iconColor;
     }
 
     public int CurrentDay => currentDay;
